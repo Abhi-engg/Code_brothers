@@ -1,0 +1,5 @@
+spacy 
+nltk
+scikit-learn
+textstat
+en_core_web_sm
