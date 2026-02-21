@@ -21,7 +21,7 @@ Usage:
 """
 
 from .pipeline import WritingAssistant, analyze_text
-from .consistency_checker import NarrativeConsistencyAnalyzer
+from .consistency_checker import NarrativeConsistencyAnalyzer, run_narrative_tracker
 
 # Module-level exports for direct access
 from . import text_analyzer

@@ -186,7 +186,9 @@ async def analyze_endpoint(request: AnalysisRequest):
             cliches=results.get("cliches"),
             paragraph_structure=results.get("paragraph_structure"),
             lexical_density=results.get("lexical_density"),
-            sentence_rhythm=results.get("sentence_rhythm")
+            sentence_rhythm=results.get("sentence_rhythm"),
+            # Narrative tracker (Phase 5)
+            narrative_tracker=results.get("narrative_tracker"),
         )
         
     except Exception as e:

@@ -169,6 +169,12 @@ class WritingAssistant:
             except Exception as e:
                 results["tone_analysis"]["tone_transformation"] = {"error": str(e)}
         
+        # Narrative tracker (Phase 5 — needs doc + text)
+        try:
+            results["narrative_tracker"] = consistency_checker.run_narrative_tracker(text, doc)
+        except Exception as e:
+            results["narrative_tracker"] = {"error": str(e)}
+        
         # Parallel processing of independent analyses
         if self.enable_parallel:
             results = self._run_parallel_analyses(

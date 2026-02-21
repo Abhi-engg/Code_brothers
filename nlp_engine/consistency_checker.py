@@ -709,6 +709,430 @@ class NarrativeConsistencyAnalyzer:
             "consistency_score": max(0, 100 - (len(issues) * 10))
         }
 
+    # ── Phase 5: Narrative Tracking Methods ──────────────────────────
+
+    def track_plot_events(self, doc) -> List[Dict[str, Any]]:
+        """
+        Extract action/event verbs with their subjects to build an event timeline.
+
+        Scans each sentence for ROOT or main verbs and identifies the subject
+        (nsubj / nsubjpass) to produce a chronological list of plot events.
+
+        Args:
+            doc: spaCy Doc object
+
+        Returns:
+            List of event dicts with keys: sentence_index, verb, subject,
+            event_text (truncated sentence), tense.
+        """
+        tense_map = {
+            'VBD': 'past', 'VBN': 'past_participle',
+            'VB': 'base', 'VBP': 'present', 'VBZ': 'present',
+            'VBG': 'continuous',
+        }
+
+        events: List[Dict[str, Any]] = []
+        for sent_idx, sent in enumerate(doc.sents):
+            for token in sent:
+                if token.dep_ == "ROOT" and token.pos_ in ("VERB", "AUX"):
+                    # Find subject
+                    subject = None
+                    for child in token.children:
+                        if child.dep_ in ("nsubj", "nsubjpass"):
+                            # Prefer named-entity text if overlapping
+                            subject = child.text
+                            for ent in sent.ents:
+                                if ent.start <= child.i < ent.end:
+                                    subject = ent.text
+                                    break
+                            break
+
+                    events.append({
+                        "sentence_index": sent_idx,
+                        "verb": token.lemma_,
+                        "verb_text": token.text,
+                        "subject": subject,
+                        "tense": tense_map.get(token.tag_, "other"),
+                        "event_text": sent.text.strip()[:120],
+                    })
+        return events
+
+    def track_settings(self, doc) -> List[Dict[str, Any]]:
+        """
+        Extract locations and spatial markers sentence-by-sentence.
+
+        Identifies GPE / LOC / FAC named entities and spatial preposition
+        phrases (e.g. "in the forest", "at the station") to track where the
+        action is taking place over the course of the text.
+
+        Args:
+            doc: spaCy Doc object
+
+        Returns:
+            List of setting dicts with keys: sentence_index, locations,
+            spatial_phrases.
+        """
+        spatial_preps = {
+            "in", "at", "on", "near", "beside", "behind", "above", "below",
+            "across", "through", "inside", "outside", "between", "beyond",
+            "under", "over", "around", "along", "toward", "towards",
+        }
+
+        settings: List[Dict[str, Any]] = []
+        for sent_idx, sent in enumerate(doc.sents):
+            locations = []
+            spatial_phrases = []
+
+            # Named-entity locations
+            for ent in sent.ents:
+                if ent.label_ in ("GPE", "LOC", "FAC"):
+                    locations.append({
+                        "text": ent.text,
+                        "type": ent.label_,
+                    })
+
+            # Spatial preposition phrases
+            for token in sent:
+                if token.text.lower() in spatial_preps and token.dep_ == "prep":
+                    phrase_tokens = [token]
+                    for child in token.subtree:
+                        phrase_tokens.append(child)
+                    phrase_text = " ".join(
+                        t.text for t in sorted(set(phrase_tokens), key=lambda t: t.i)
+                    )
+                    if len(phrase_text.split()) >= 2:
+                        spatial_phrases.append(phrase_text)
+
+            if locations or spatial_phrases:
+                settings.append({
+                    "sentence_index": sent_idx,
+                    "locations": locations,
+                    "spatial_phrases": spatial_phrases,
+                })
+        return settings
+
+    @staticmethod
+    def detect_dialogue(text: str) -> Dict[str, Any]:
+        """
+        Extract quoted speech, attribute speakers, and compute ratios.
+
+        Uses regex to find text enclosed in double or single quotes (and
+        smart/curly quotes).  For each quote, looks for the nearest PERSON
+        entity in the surrounding text to attribute the speaker.
+
+        Args:
+            text: Raw input text
+
+        Returns:
+            Dict with keys: quotes (list), speaker_lines (dict mapping
+            speaker→count), dialogue_ratio, narration_ratio, total_quotes.
+        """
+        import spacy
+        try:
+            nlp = spacy.load("en_core_web_sm")
+        except OSError:
+            return {"quotes": [], "speaker_lines": {}, "dialogue_ratio": 0,
+                    "narration_ratio": 1.0, "total_quotes": 0}
+
+        # Match double, single, and smart quotes
+        quote_pattern = re.compile(
+            r'["\u201c](.*?)["\u201d]|[\'\u2018](.*?)[\'\u2019]',
+            re.DOTALL,
+        )
+
+        matches = list(quote_pattern.finditer(text))
+        total_dialogue_chars = 0
+        quotes: List[Dict[str, Any]] = []
+        speaker_lines: Dict[str, int] = defaultdict(int)
+
+        for m in matches:
+            content = m.group(1) or m.group(2) or ""
+            if len(content.strip()) < 2:
+                continue
+
+            total_dialogue_chars += len(content)
+
+            # Contextual window for speaker attribution
+            start = max(0, m.start() - 80)
+            end = min(len(text), m.end() + 80)
+            context = text[start:end]
+            ctx_doc = nlp(context)
+
+            speaker = None
+            min_dist = float("inf")
+            quote_mid = (m.start() + m.end()) / 2
+
+            for ent in ctx_doc.ents:
+                if ent.label_ == "PERSON":
+                    ent_abs = start + ent.start_char
+                    dist = abs(ent_abs - quote_mid)
+                    if dist < min_dist:
+                        min_dist = dist
+                        speaker = ent.text
+
+            quotes.append({
+                "content": content.strip()[:120],
+                "speaker": speaker,
+                "position": m.start(),
+            })
+            if speaker:
+                speaker_lines[speaker] += 1
+
+        total_len = max(len(text), 1)
+        dialogue_ratio = round(total_dialogue_chars / total_len, 3)
+
+        return {
+            "quotes": quotes,
+            "speaker_lines": dict(speaker_lines),
+            "dialogue_ratio": dialogue_ratio,
+            "narration_ratio": round(1 - dialogue_ratio, 3),
+            "total_quotes": len(quotes),
+        }
+
+    @staticmethod
+    def analyze_pacing(text: str, doc) -> Dict[str, Any]:
+        """
+        Segment the text into dialogue / action / description blocks and
+        compute ratios and rhythm metrics.
+
+        Classification per sentence:
+        - dialogue: contains a quoted span
+        - action: dominant ROOT verb is a physical-action verb
+        - description: everything else (descriptive / expository)
+
+        Args:
+            text: Raw input text
+            doc: spaCy Doc object
+
+        Returns:
+            Dict with keys: blocks (list of {type, sentence_index, preview}),
+            ratios ({dialogue, action, description}), avg_block_length,
+            pace_score (0-100, higher = faster-paced).
+        """
+        quote_pattern = re.compile(r'["\u201c].*?["\u201d]|[\'\u2018].*?[\'\u2019]')
+
+        action_verbs = {
+            "run", "hit", "jump", "fight", "grab", "push", "pull", "throw",
+            "kick", "shoot", "climb", "dash", "slam", "strike", "crash",
+            "chase", "flee", "fall", "race", "charge", "dodge", "attack",
+            "leap", "swing", "catch", "break", "smash", "rush", "sprint",
+            "dive", "scream", "shout", "yell", "bang", "explode", "collapse",
+        }
+
+        blocks: List[Dict[str, Any]] = []
+        counts = {"dialogue": 0, "action": 0, "description": 0}
+
+        for sent_idx, sent in enumerate(doc.sents):
+            sent_text = sent.text.strip()
+
+            # Classify sentence
+            if quote_pattern.search(sent_text):
+                block_type = "dialogue"
+            else:
+                root_verbs = [t for t in sent if t.dep_ == "ROOT" and t.pos_ == "VERB"]
+                if any(v.lemma_.lower() in action_verbs for v in root_verbs):
+                    block_type = "action"
+                else:
+                    block_type = "description"
+
+            counts[block_type] += 1
+            blocks.append({
+                "type": block_type,
+                "sentence_index": sent_idx,
+                "preview": sent_text[:100],
+            })
+
+        total_sents = max(sum(counts.values()), 1)
+        ratios = {k: round(v / total_sents, 3) for k, v in counts.items()}
+
+        # Average block length (consecutive same-type sentences)
+        run_lengths: List[int] = []
+        if blocks:
+            current_type = blocks[0]["type"]
+            current_len = 1
+            for b in blocks[1:]:
+                if b["type"] == current_type:
+                    current_len += 1
+                else:
+                    run_lengths.append(current_len)
+                    current_type = b["type"]
+                    current_len = 1
+            run_lengths.append(current_len)
+
+        avg_block = round(sum(run_lengths) / max(len(run_lengths), 1), 2)
+
+        # Pace score: higher dialogue + action → faster pace
+        pace_score = round(
+            (ratios.get("dialogue", 0) + ratios.get("action", 0)) * 100, 1
+        )
+
+        return {
+            "blocks": blocks,
+            "ratios": ratios,
+            "avg_block_length": avg_block,
+            "pace_score": pace_score,
+            "total_sentences": total_sents,
+            "interpretation": _get_pacing_interpretation(pace_score, ratios),
+        }
+
+    def build_narrative_timeline(self, doc) -> Dict[str, Any]:
+        """
+        Build a comprehensive narrative timeline combining characters, events,
+        settings, and dialogue into a single chronological view.
+
+        Each entry maps to a sentence index and lists who appears, what happens,
+        where it happens, and any dialogue.
+
+        Args:
+            doc: spaCy Doc object
+
+        Returns:
+            Dict with keys: timeline (list), summary (stats dict).
+        """
+        # Make sure character memory is populated
+        if not self.character_memory:
+            self._build_character_memory(doc)
+
+        events = self.track_plot_events(doc)
+        settings = self.track_settings(doc)
+
+        # Index settings by sentence
+        settings_idx: Dict[int, Dict] = {}
+        for s in settings:
+            settings_idx[s["sentence_index"]] = s
+
+        # Index characters by sentence
+        chars_idx: Dict[int, List[str]] = defaultdict(list)
+        for ent in doc.ents:
+            if ent.label_ == "PERSON":
+                for sent_idx, sent in enumerate(doc.sents):
+                    if ent.start >= sent.start and ent.end <= sent.end:
+                        if ent.text not in chars_idx[sent_idx]:
+                            chars_idx[sent_idx].append(ent.text)
+                        break
+
+        # Detect dialogue positions (sentence indices)
+        quote_pattern = re.compile(r'["\u201c].*?["\u201d]|[\'\u2018].*?[\'\u2019]')
+        dialogue_sents: Set[int] = set()
+        for sent_idx, sent in enumerate(doc.sents):
+            if quote_pattern.search(sent.text):
+                dialogue_sents.add(sent_idx)
+
+        # Build unified timeline
+        all_sent_indices = set()
+        for e in events:
+            all_sent_indices.add(e["sentence_index"])
+        for s in settings:
+            all_sent_indices.add(s["sentence_index"])
+        for idx in chars_idx:
+            all_sent_indices.add(idx)
+        all_sent_indices.update(dialogue_sents)
+
+        timeline: List[Dict[str, Any]] = []
+        for idx in sorted(all_sent_indices):
+            entry: Dict[str, Any] = {"sentence_index": idx}
+
+            # Characters
+            if idx in chars_idx:
+                entry["characters"] = chars_idx[idx]
+
+            # Events
+            sent_events = [e for e in events if e["sentence_index"] == idx]
+            if sent_events:
+                entry["events"] = [
+                    {"verb": e["verb"], "subject": e["subject"], "tense": e["tense"]}
+                    for e in sent_events
+                ]
+
+            # Settings
+            if idx in settings_idx:
+                entry["locations"] = settings_idx[idx].get("locations", [])
+                entry["spatial"] = settings_idx[idx].get("spatial_phrases", [])
+
+            # Dialogue flag
+            if idx in dialogue_sents:
+                entry["has_dialogue"] = True
+
+            timeline.append(entry)
+
+        # Summary statistics
+        unique_chars = set()
+        for chars in chars_idx.values():
+            unique_chars.update(chars)
+
+        unique_locations = set()
+        for s in settings:
+            for loc in s.get("locations", []):
+                unique_locations.add(loc["text"])
+
+        summary = {
+            "total_events": len(events),
+            "unique_characters": len(unique_chars),
+            "unique_locations": len(unique_locations),
+            "dialogue_sentences": len(dialogue_sents),
+            "timeline_entries": len(timeline),
+        }
+
+        return {"timeline": timeline, "summary": summary}
+
+
+# ── Pacing helper (module-level) ─────────────────────────────────────
+
+def _get_pacing_interpretation(pace_score: float, ratios: Dict[str, float]) -> str:
+    """Return a human-readable pacing interpretation."""
+    if pace_score >= 70:
+        return "Fast-paced — dominated by dialogue and action"
+    elif pace_score >= 40:
+        return "Balanced pacing — good mix of action, dialogue, and description"
+    elif pace_score >= 20:
+        return "Slow-paced — mostly descriptive or expository"
+    else:
+        return "Very slow — almost entirely descriptive; consider adding dialogue or action"
+
+
+# ── Standalone orchestrator ──────────────────────────────────────────
+
+def run_narrative_tracker(text: str, doc) -> Dict[str, Any]:
+    """
+    Top-level function that runs all narrative-tracking analyses and
+    returns a single consolidated dict suitable for the API response.
+
+    Args:
+        text: Raw input text
+        doc: spaCy Doc object
+
+    Returns:
+        Dict with keys: plot_events, settings, dialogue, pacing,
+        narrative_timeline, character_memory.
+    """
+    analyzer = NarrativeConsistencyAnalyzer()
+    analyzer._build_character_memory(doc)
+
+    plot_events = analyzer.track_plot_events(doc)
+    settings = analyzer.track_settings(doc)
+    dialogue = analyzer.detect_dialogue(text)
+    pacing = analyzer.analyze_pacing(text, doc)
+    timeline = analyzer.build_narrative_timeline(doc)
+
+    # Serialise character_memory (sets → lists)
+    char_mem = {}
+    for name, data in analyzer.character_memory.items():
+        char_mem[name] = {
+            "canonical_name": data["canonical_name"],
+            "type": data["type"],
+            "mention_count": len(data["mentions"]),
+            "first_mention_sentence": data["first_mention_sentence"],
+        }
+
+    return {
+        "plot_events": plot_events,
+        "settings": settings,
+        "dialogue": dialogue,
+        "pacing": pacing,
+        "narrative_timeline": timeline,
+        "character_memory": char_mem,
+    }
+
 
 def check_tense_consistency(doc) -> Dict[str, Any]:
     """

@@ -317,6 +317,9 @@ function renderTab(tabName) {
         case 'transform':
             content = renderTransform();
             break;
+        case 'narrative':
+            content = renderNarrative();
+            break;
         case 'details':
             content = renderDetails();
             break;
@@ -1223,6 +1226,176 @@ function renderStyleHeatmap() {
             <p class="text-xs text-gray-500 mt-2">Higher scores indicate stronger presence of that style dimension (0-100)</p>
         </div>
     `;
+}
+
+            </div>
+            <p class="text-xs text-gray-500 mt-2">Higher scores indicate stronger presence of that style dimension (0-100)</p>
+        </div>
+    `;
+}
+
+// ── Render Narrative Tab (Phase 5) ──────────────────────────────────
+function renderNarrative() {
+    const nt = analysisResults.narrative_tracker;
+    if (!nt || nt.error) {
+        return `<div class="text-center py-12 text-gray-500">
+            <p class="text-4xl mb-3">📖</p>
+            <p class="font-medium">Narrative tracking data not available</p>
+            <p class="text-sm mt-1">${nt?.error || 'Submit text to generate narrative analysis'}</p>
+        </div>`;
+    }
+
+    let html = `<div class="space-y-6 animate-fade-in">`;
+
+    // ── Summary Cards ─────────────────────────────────────────────
+    const summary = nt.narrative_timeline?.summary || {};
+    html += `
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+            ${_narrativeCard('📝', 'Events', summary.total_events ?? 0)}
+            ${_narrativeCard('👤', 'Characters', summary.unique_characters ?? 0)}
+            ${_narrativeCard('📍', 'Locations', summary.unique_locations ?? 0)}
+            ${_narrativeCard('💬', 'Dialogue Lines', nt.dialogue?.total_quotes ?? 0)}
+            ${_narrativeCard('⏱️', 'Pace Score', nt.pacing?.pace_score ?? '—')}
+        </div>
+    `;
+
+    // ── Pacing ────────────────────────────────────────────────────
+    if (nt.pacing) {
+        const p = nt.pacing;
+        html += `<div class="bg-white rounded-lg border p-4">
+            <h3 class="font-semibold text-gray-900 mb-3">⏱️ Pacing Analysis</h3>
+            <p class="text-sm text-gray-600 mb-3">${p.interpretation || ''}</p>
+            <div class="grid grid-cols-3 gap-4 mb-2">`;
+        for (const [type, ratio] of Object.entries(p.ratios || {})) {
+            const pct = (ratio * 100).toFixed(1);
+            const color = type === 'dialogue' ? 'blue' : type === 'action' ? 'red' : 'gray';
+            html += `<div>
+                <div class="flex justify-between text-xs mb-1">
+                    <span class="capitalize">${type}</span><span>${pct}%</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div class="bg-${color}-500 h-2 rounded-full" style="width:${pct}%"></div>
+                </div>
+            </div>`;
+        }
+        html += `</div>
+            <p class="text-xs text-gray-400">Avg block length: ${p.avg_block_length ?? '—'} sentences</p>
+        </div>`;
+    }
+
+    // ── Dialogue ──────────────────────────────────────────────────
+    if (nt.dialogue && nt.dialogue.total_quotes > 0) {
+        const d = nt.dialogue;
+        html += `<div class="bg-white rounded-lg border p-4">
+            <h3 class="font-semibold text-gray-900 mb-3">💬 Dialogue Breakdown</h3>
+            <div class="flex gap-6 text-sm text-gray-600 mb-3">
+                <span>Dialogue ratio: <strong>${(d.dialogue_ratio * 100).toFixed(1)}%</strong></span>
+                <span>Narration ratio: <strong>${(d.narration_ratio * 100).toFixed(1)}%</strong></span>
+            </div>`;
+        if (Object.keys(d.speaker_lines || {}).length > 0) {
+            html += `<h4 class="text-xs font-semibold text-gray-500 uppercase mb-2">Speaker Attribution</h4>
+            <div class="flex flex-wrap gap-2">`;
+            for (const [speaker, count] of Object.entries(d.speaker_lines)) {
+                html += `<span class="px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-sm">${speaker}: ${count} line${count > 1 ? 's' : ''}</span>`;
+            }
+            html += `</div>`;
+        }
+        if (d.quotes && d.quotes.length > 0) {
+            html += `<div class="mt-3 space-y-2 max-h-48 overflow-y-auto">`;
+            for (const q of d.quotes.slice(0, 15)) {
+                html += `<div class="text-sm border-l-2 border-blue-300 pl-3 py-1">
+                    <span class="text-gray-800">"${_esc(q.content)}"</span>
+                    ${q.speaker ? `<span class="text-xs text-gray-400 ml-2">— ${_esc(q.speaker)}</span>` : ''}
+                </div>`;
+            }
+            if (d.quotes.length > 15) html += `<p class="text-xs text-gray-400">+${d.quotes.length - 15} more quotes</p>`;
+            html += `</div>`;
+        }
+        html += `</div>`;
+    }
+
+    // ── Plot Events ───────────────────────────────────────────────
+    if (nt.plot_events && nt.plot_events.length > 0) {
+        html += `<div class="bg-white rounded-lg border p-4">
+            <h3 class="font-semibold text-gray-900 mb-3">📝 Plot Events (${nt.plot_events.length})</h3>
+            <div class="space-y-2 max-h-64 overflow-y-auto">`;
+        for (const ev of nt.plot_events.slice(0, 20)) {
+            const tenseBadge = ev.tense ? `<span class="text-xs px-1.5 py-0.5 rounded bg-purple-50 text-purple-600">${ev.tense}</span>` : '';
+            html += `<div class="flex items-start gap-2 text-sm">
+                <span class="text-gray-400 w-6 text-right shrink-0">#${ev.sentence_index}</span>
+                <span class="font-medium text-indigo-700">${_esc(ev.subject || '?')}</span>
+                <span class="text-gray-800">→ ${_esc(ev.verb_text)}</span>
+                ${tenseBadge}
+            </div>`;
+        }
+        if (nt.plot_events.length > 20) html += `<p class="text-xs text-gray-400 mt-1">+${nt.plot_events.length - 20} more events</p>`;
+        html += `</div></div>`;
+    }
+
+    // ── Settings / Locations ──────────────────────────────────────
+    if (nt.settings && nt.settings.length > 0) {
+        html += `<div class="bg-white rounded-lg border p-4">
+            <h3 class="font-semibold text-gray-900 mb-3">📍 Settings & Locations</h3>
+            <div class="space-y-2 max-h-48 overflow-y-auto">`;
+        for (const s of nt.settings) {
+            const locs = (s.locations || []).map(l => `<span class="entity-tag entity-${l.type.toLowerCase()}">${_esc(l.text)}</span>`).join(' ');
+            const spatial = (s.spatial_phrases || []).map(p => `<span class="text-xs text-gray-500 italic">${_esc(p)}</span>`).join(', ');
+            html += `<div class="text-sm">
+                <span class="text-gray-400 mr-2">#${s.sentence_index}</span>${locs} ${spatial}
+            </div>`;
+        }
+        html += `</div></div>`;
+    }
+
+    // ── Narrative Timeline ────────────────────────────────────────
+    if (nt.narrative_timeline?.timeline && nt.narrative_timeline.timeline.length > 0) {
+        html += `<div class="bg-white rounded-lg border p-4">
+            <h3 class="font-semibold text-gray-900 mb-3">🗺️ Narrative Timeline</h3>
+            <div class="space-y-3 max-h-72 overflow-y-auto">`;
+        for (const entry of nt.narrative_timeline.timeline.slice(0, 30)) {
+            html += `<div class="flex gap-3 text-sm border-l-2 border-indigo-200 pl-3 py-1">
+                <span class="text-gray-400 shrink-0 w-7 text-right">#${entry.sentence_index}</span>
+                <div class="space-y-0.5">`;
+            if (entry.characters) html += `<div>👤 ${entry.characters.map(c => `<span class="font-medium text-indigo-700">${_esc(c)}</span>`).join(', ')}</div>`;
+            if (entry.events) html += `<div>⚡ ${entry.events.map(e => `${_esc(e.subject || '?')} → <em>${_esc(e.verb)}</em>`).join('; ')}</div>`;
+            if (entry.locations) html += `<div>📍 ${entry.locations.map(l => _esc(l.text)).join(', ')}</div>`;
+            if (entry.has_dialogue) html += `<div class="text-blue-500 text-xs">💬 dialogue</div>`;
+            html += `</div></div>`;
+        }
+        if (nt.narrative_timeline.timeline.length > 30) html += `<p class="text-xs text-gray-400 mt-1">+${nt.narrative_timeline.timeline.length - 30} more entries</p>`;
+        html += `</div></div>`;
+    }
+
+    // ── Character Memory ──────────────────────────────────────────
+    if (nt.character_memory && Object.keys(nt.character_memory).length > 0) {
+        html += `<div class="bg-white rounded-lg border p-4">
+            <h3 class="font-semibold text-gray-900 mb-3">🧠 Character Memory</h3>
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-3">`;
+        for (const [key, data] of Object.entries(nt.character_memory)) {
+            html += `<div class="p-3 rounded-lg bg-gray-50 border">
+                <p class="font-medium text-gray-900">${_esc(data.canonical_name)}</p>
+                <p class="text-xs text-gray-500">${data.type} · ${data.mention_count} mention${data.mention_count !== 1 ? 's' : ''}</p>
+                <p class="text-xs text-gray-400">First seen: sentence #${data.first_mention_sentence ?? '?'}</p>
+            </div>`;
+        }
+        html += `</div></div>`;
+    }
+
+    html += `</div>`;
+    return html;
+}
+
+function _narrativeCard(emoji, label, value) {
+    return `<div class="bg-white rounded-lg border p-3 text-center">
+        <p class="text-2xl mb-1">${emoji}</p>
+        <p class="text-lg font-bold text-gray-900">${value}</p>
+        <p class="text-xs text-gray-500">${label}</p>
+    </div>`;
+}
+
+function _esc(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // Render Details Tab

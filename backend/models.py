@@ -147,6 +147,8 @@ class AnalysisResponse(BaseModel):
     paragraph_structure: Optional[Dict[str, Any]] = None
     lexical_density: Optional[Dict[str, Any]] = None
     sentence_rhythm: Optional[Dict[str, Any]] = None
+    # Narrative tracker (Phase 5)
+    narrative_tracker: Optional[Dict[str, Any]] = None
     
     class Config:
         json_schema_extra = {
