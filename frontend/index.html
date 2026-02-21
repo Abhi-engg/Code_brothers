@@ -32,7 +32,7 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
                         </svg>
                     </div>
-                    <h1 class="text-2xl font-bold text-gray-900">Writing Assistant</h1>
+                    <h1 class="text-2xl font-bold text-gray-900">OptiText</h1>
                 </div>
                 <div class="flex items-center space-x-4">
                     <span id="api-status" class="flex items-center text-sm text-gray-500">
@@ -82,22 +82,25 @@ Try this example: Dr. Sarah Johnson presented her findings at MIT yesterday. She
 
                 <!-- Results Tabs -->
                 <div id="results-container" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hidden">
-                    <div class="border-b border-gray-200">
-                        <nav class="flex -mb-px" id="result-tabs">
-                            <button class="tab-btn active px-6 py-3 text-sm font-medium border-b-2 border-primary text-primary" data-tab="overview">
-                                Overview
+                    <div class="border-b border-gray-200 overflow-x-auto">
+                        <nav class="flex -mb-px whitespace-nowrap" id="result-tabs">
+                            <button class="tab-btn active px-4 py-3 text-sm font-medium border-b-2 border-primary text-primary" data-tab="overview">
+                                📊 Overview
                             </button>
-                            <button class="tab-btn px-6 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="issues">
-                                Issues
+                            <button class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="issues">
+                                ⚠️ Issues
                             </button>
-                            <button class="tab-btn px-6 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="suggestions">
-                                Suggestions
+                            <button class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="enhancements">
+                                ✨ Enhanced
                             </button>
-                            <button class="tab-btn px-6 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="transform">
-                                Transform
+                            <button class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="suggestions">
+                                💡 Suggestions
                             </button>
-                            <button class="tab-btn px-6 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="details">
-                                Details
+                            <button class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="transform">
+                                🔄 Transform
+                            </button>
+                            <button class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="details">
+                                📋 Details
                             </button>
                         </nav>
                     </div>

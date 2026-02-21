@@ -114,6 +114,15 @@ class AnalysisResponse(BaseModel):
     suggestions: Optional[List[Dict[str, Any]]] = None
     explanations: Optional[Dict[str, Any]] = None
     scores: Optional[AnalysisScores] = None
+    # New enhanced features
+    passive_voice: Optional[Dict[str, Any]] = None
+    sentiment: Optional[Dict[str, Any]] = None
+    vocabulary_complexity: Optional[Dict[str, Any]] = None
+    filler_words: Optional[Dict[str, Any]] = None
+    cliches: Optional[Dict[str, Any]] = None
+    paragraph_structure: Optional[Dict[str, Any]] = None
+    lexical_density: Optional[Dict[str, Any]] = None
+    sentence_rhythm: Optional[Dict[str, Any]] = None
     
     class Config:
         json_schema_extra = {

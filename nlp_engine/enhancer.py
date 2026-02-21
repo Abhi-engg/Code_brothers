@@ -267,3 +267,201 @@ def get_improvement_suggestions(readability: Dict, flow: Dict) -> List[Dict[str,
         })
     
     return suggestions
+
+
+def analyze_paragraph_structure(text: str) -> Dict[str, Any]:
+    """
+    Analyze paragraph structure and cohesion.
+    
+    Args:
+        text: Input text to analyze
+        
+    Returns:
+        Dictionary with paragraph analysis metrics
+    """
+    # Split text into paragraphs (separated by double newlines or single newlines with blank lines)
+    paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+    if not paragraphs:
+        paragraphs = [p.strip() for p in text.split('\n') if p.strip()]
+    
+    if len(paragraphs) <= 1:
+        # Treat entire text as one paragraph
+        paragraphs = [text]
+    
+    paragraph_metrics = []
+    
+    for idx, para in enumerate(paragraphs):
+        sentences = [s.strip() for s in para.split('.') if s.strip()]
+        words = para.split()
+        
+        paragraph_metrics.append({
+            "index": idx,
+            "sentence_count": len(sentences),
+            "word_count": len(words),
+            "character_count": len(para),
+            "avg_sentence_length": round(len(words) / len(sentences), 2) if sentences else 0,
+            "too_long": len(words) > 150,
+            "too_short": len(words) < 20 and len(paragraphs) > 1
+        })
+    
+    # Calculate paragraph consistency
+    word_counts = [p["word_count"] for p in paragraph_metrics]
+    avg_words = sum(word_counts) / len(word_counts) if word_counts else 0
+    
+    # Identify issues
+    issues = []
+    for metric in paragraph_metrics:
+        if metric["too_long"]:
+            issues.append({
+                "type": "long_paragraph",
+                "paragraph_index": metric["index"] + 1,
+                "message": f"Paragraph {metric['index'] + 1} is very long ({metric['word_count']} words)",
+                "severity": "medium"
+            })
+        elif metric["too_short"]:
+            issues.append({
+                "type": "short_paragraph",
+                "paragraph_index": metric["index"] + 1,
+                "message": f"Paragraph {metric['index'] + 1} is very short ({metric['word_count']} words)",
+                "severity": "low"
+            })
+    
+    return {
+        "paragraph_count": len(paragraphs),
+        "paragraphs": paragraph_metrics,
+        "average_words_per_paragraph": round(avg_words, 2),
+        "issues": issues,
+        "assessment": "Well-structured" if not issues else f"Found {len(issues)} structural issues"
+    }
+
+
+def calculate_lexical_density(doc) -> Dict[str, Any]:
+    """
+    Calculate lexical density (ratio of content words to total words).
+    Higher density = more informational content.
+    
+    Args:
+        doc: spaCy Doc object
+        
+    Returns:
+        Dictionary with lexical density metrics
+    """
+    content_pos = {'NOUN', 'VERB', 'ADJ', 'ADV'}
+    function_pos = {'ADP', 'DET', 'CONJ', 'PRON', 'AUX', 'PART'}
+    
+    content_words = []
+    function_words = []
+    total_words = 0
+    
+    for token in doc:
+        if token.is_alpha and not token.is_space:
+            total_words += 1
+            if token.pos_ in content_pos:
+                content_words.append(token.text)
+            elif token.pos_ in function_pos:
+                function_words.append(token.text)
+    
+    if total_words == 0:
+        return {
+            "lexical_density": 0.0,
+            "content_words": 0,
+            "function_words": 0,
+            "interpretation": "No words to analyze"
+        }
+    
+    lexical_density = len(content_words) / total_words
+    
+    # Interpret density
+    if lexical_density > 0.6:
+        interpretation = "High density - Very informational, may be dense for some readers"
+        style = "academic/technical"
+    elif lexical_density > 0.4:
+        interpretation = "Moderate density - Good balance of information and readability"
+        style = "formal"
+    else:
+        interpretation = "Low density - Conversational and easy to read"
+        style = "casual"
+    
+    return {
+        "lexical_density": round(lexical_density, 3),
+        "content_words": len(content_words),
+        "function_words": len(function_words),
+        "total_words": total_words,
+        "content_ratio": round(len(content_words) / total_words, 3),
+        "interpretation": interpretation,
+        "suggested_style": style
+    }
+
+
+def analyze_sentence_rhythm(sentences: List[str]) -> Dict[str, Any]:
+    """
+    Analyze the rhythm and pacing of sentences.
+    
+    Args:
+        sentences: List of sentence strings
+        
+    Returns:
+        Dictionary with rhythm analysis
+    """
+    if not sentences:
+        return {"rhythm_score": 0, "pattern": "none"}
+    
+    # Get sentence lengths
+    lengths = [len(sent.split()) for sent in sentences]
+    
+    if not lengths:
+        return {"rhythm_score": 0, "pattern": "none"}
+    
+    # Calculate variation
+    avg_length = sum(lengths) / len(lengths)
+    variance = sum((l - avg_length) ** 2 for l in lengths) / len(lengths)
+    std_dev = variance ** 0.5
+    
+    # Detect patterns (short-long alternation, consistent length, etc.)
+    pattern = "varied"
+    if std_dev < 3:
+        pattern = "monotonous"
+    elif std_dev > 15:
+        pattern = "highly_varied"
+    
+    # Check for short-long alternation pattern
+    alternations = 0
+    for i in range(len(lengths) - 1):
+        if (lengths[i] < avg_length < lengths[i + 1]) or (lengths[i] > avg_length > lengths[i + 1]):
+            alternations += 1
+    
+    if alternations > len(lengths) * 0.6:
+        pattern = "alternating"
+    
+    # Calculate rhythm score (50 = ideal)
+    rhythm_score = max(0, 100 - abs(50 - (std_dev * 3)))
+    
+    return {
+        "rhythm_score": round(rhythm_score, 2),
+        "pattern": pattern,
+        "sentence_lengths": lengths,
+        "average_length": round(avg_length, 2),
+        "std_deviation": round(std_dev, 2),
+        "shortest": min(lengths),
+        "longest": max(lengths),
+        "interpretation": get_rhythm_interpretation(pattern, rhythm_score)
+    }
+
+
+def get_rhythm_interpretation(pattern: str, score: float) -> str:
+    """Interpret rhythm analysis results."""
+    interpretations = {
+        "monotonous": "Sentences are very similar in length - consider varying for better pacing",
+        "highly_varied": "Excellent variety in sentence length creates dynamic rhythm",
+        "alternating": "Nice alternating pattern between short and long sentences",
+        "varied": "Good mix of sentence lengths maintains reader interest"
+    }
+    
+    interpretation = interpretations.get(pattern, "Sentence rhythm is acceptable")
+    
+    if score < 40:
+        interpretation += " (could be improved)"
+    elif score > 70:
+        interpretation += " (excellent pacing)"
+    
+    return interpretation

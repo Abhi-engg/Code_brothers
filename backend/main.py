@@ -15,7 +15,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from models import (
+from backend.models import (
     AnalysisRequest,
     AnalysisResponse,
     TransformRequest,
@@ -170,7 +170,16 @@ async def analyze_endpoint(request: AnalysisRequest):
             issues=results.get("issues"),
             suggestions=results.get("suggestions"),
             explanations=results.get("explanations"),
-            scores=results.get("scores")
+            scores=results.get("scores"),
+            # New enhanced features
+            passive_voice=results.get("passive_voice"),
+            sentiment=results.get("sentiment"),
+            vocabulary_complexity=results.get("vocabulary_complexity"),
+            filler_words=results.get("filler_words"),
+            cliches=results.get("cliches"),
+            paragraph_structure=results.get("paragraph_structure"),
+            lexical_density=results.get("lexical_density"),
+            sentence_rhythm=results.get("sentence_rhythm")
         )
         
     except Exception as e:

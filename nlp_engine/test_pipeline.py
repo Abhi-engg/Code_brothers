@@ -114,7 +114,21 @@ class WritingAssistant:
             )
             sentence_structures = text_analyzer.analyze_sentence_structure(doc)
             
+            # NEW: Advanced text analysis features
+            passive_voice = text_analyzer.detect_passive_voice(doc)
+            sentiment = text_analyzer.analyze_sentiment(doc)
+            vocabulary_complexity = text_analyzer.analyze_vocabulary_complexity(doc, analysis["tokens"])
+            filler_words = text_analyzer.detect_filler_words(analysis["tokens"])
+            
             results["text_analysis"]["sentence_structures"] = sentence_structures
+            
+            # Store enhanced features at top level for API response
+            results["passive_voice"] = passive_voice
+            results["sentiment"] = sentiment
+            results["vocabulary_complexity"] = vocabulary_complexity
+            results["filler_words"] = filler_words
+            
+            # Store only list-type issues in issues dict
             results["issues"]["long_sentences"] = long_sentences
             results["issues"]["repeated_words"] = repeated_words
         else:
@@ -151,7 +165,7 @@ class WritingAssistant:
     ) -> Dict[str, Any]:
         """Run independent analyses in parallel using ThreadPoolExecutor."""
         
-        with ThreadPoolExecutor(max_workers=4) as executor:
+        with ThreadPoolExecutor(max_workers=6) as executor:
             futures = {}
             
             # Submit parallel tasks
@@ -187,6 +201,26 @@ class WritingAssistant:
                     self.target_style
                 )
             
+            # NEW: Advanced analysis features
+            futures["paragraph_structure"] = executor.submit(
+                enhancer.analyze_paragraph_structure, text
+            )
+            futures["lexical_density"] = executor.submit(
+                enhancer.calculate_lexical_density, doc
+            )
+            futures["sentence_rhythm"] = executor.submit(
+                enhancer.analyze_sentence_rhythm, analysis.get("sentences", [])
+            )
+            futures["tense_consistency"] = executor.submit(
+                consistency_checker.check_tense_consistency, doc
+            )
+            futures["perspective_consistency"] = executor.submit(
+                consistency_checker.check_perspective_consistency, doc
+            )
+            futures["cliches"] = executor.submit(
+                style_transformer.detect_cliches, text
+            )
+            
             # Collect results
             for key, future in futures.items():
                 try:
@@ -201,6 +235,25 @@ class WritingAssistant:
                         results["consistency"] = result
                     elif key == "transform":
                         results["style_transformation"] = result
+                    elif key == "paragraph_structure":
+                        results["paragraph_structure"] = result
+                    elif key == "lexical_density":
+                        results["lexical_density"] = result
+                    elif key == "sentence_rhythm":
+                        results["sentence_rhythm"] = result
+                    elif key == "tense_consistency":
+                        results["consistency"]["tense"] = result
+                        if result.get("issues"):
+                            results["issues"]["tense_shifts"] = result["issues"]
+                    elif key == "perspective_consistency":
+                        results["consistency"]["perspective"] = result
+                        if result.get("perspective_shifts"):
+                            results["issues"]["perspective_shifts"] = result["perspective_shifts"]
+                    elif key == "cliches":
+                        results["cliches"] = result
+                        # Store cliche list in issues if any found
+                        if result.get("cliches") and isinstance(result["cliches"], list):
+                            results["issues"]["cliches"] = result["cliches"]
                 except Exception as e:
                     results[key] = {"error": str(e)}
         
@@ -248,6 +301,32 @@ class WritingAssistant:
                 self.target_style
             )
         
+        # NEW: Advanced analysis features
+        results["paragraph_structure"] = enhancer.analyze_paragraph_structure(text)
+        results["lexical_density"] = enhancer.calculate_lexical_density(doc)
+        results["sentence_rhythm"] = enhancer.analyze_sentence_rhythm(analysis.get("sentences", []))
+        
+        # Consistency enhancements
+        tense_result = consistency_checker.check_tense_consistency(doc)
+        perspective_result = consistency_checker.check_perspective_consistency(doc)
+        
+        if "consistency" not in results:
+            results["consistency"] = {}
+        results["consistency"]["tense"] = tense_result
+        results["consistency"]["perspective"] = perspective_result
+        
+        if tense_result.get("issues"):
+            results["issues"]["tense_shifts"] = tense_result["issues"]
+        if perspective_result.get("perspective_shifts"):
+            results["issues"]["perspective_shifts"] = perspective_result["perspective_shifts"]
+        
+        # Style enhancements - store at top level
+        cliches_result = style_transformer.detect_cliches(text)
+        results["cliches"] = cliches_result
+        # Store cliche list in issues if any found
+        if cliches_result.get("cliches") and isinstance(cliches_result["cliches"], list):
+            results["issues"]["cliches"] = cliches_result["cliches"]
+        
         # Generate improvement suggestions
         if features["readability"] and features["flow"]:
             results["suggestions"] = enhancer.get_improvement_suggestions(
@@ -294,25 +373,60 @@ class WritingAssistant:
         if flow:
             scores["flow"] = flow.get("flow_score", 50)
         
-        # Consistency score
+        # Consistency score (weighted average of multiple checks)
         consistency = results.get("consistency", {})
         if consistency:
-            scores["consistency"] = consistency.get("overall_consistency_score", 100)
+            entity_score = consistency.get("overall_consistency_score", 100)
+            tense_score = consistency.get("tense", {}).get("consistency_score", 100)
+            perspective_score = consistency.get("perspective", {}).get("consistency_score", 100)
+            
+            # Weighted average
+            scores["consistency"] = round((entity_score * 0.4 + tense_score * 0.3 + perspective_score * 0.3), 2)
         
         # Issues score (inverse - fewer issues = higher score)
         issues = results.get("issues", {})
         issue_count = (
             len(issues.get("long_sentences", [])) +
-            len(issues.get("repeated_words", []))
+            len(issues.get("repeated_words", [])) +
+            len(issues.get("passive_voice", [])) +
+            len(issues.get("tense_shifts", [])) +
+            len(issues.get("perspective_shifts", [])) +
+            len(issues.get("cliches", []))
         )
-        scores["issues"] = max(0, 100 - (issue_count * 10))
         
-        # Overall score (weighted average)
+        # Factor in filler words
+        filler_data = results.get("text_analysis", {}).get("filler_words", {})
+        if filler_data:
+            issue_count += min(10, filler_data.get("total_fillers", 0) // 2)
+        
+        scores["issues"] = max(0, 100 - (issue_count * 5))
+        
+        # NEW: Vocabulary score (based on lexical diversity and complexity)
+        vocab_data = results.get("text_analysis", {}).get("vocabulary", {})
+        if vocab_data:
+            diversity = vocab_data.get("lexical_diversity", 0.5)
+            scores["vocabulary"] = round(diversity * 100, 2)
+        
+        # NEW: Sentiment score (neutral = 100, positive/negative = varies)
+        sentiment_data = results.get("text_analysis", {}).get("sentiment", {})
+        if sentiment_data:
+            sentiment_score = sentiment_data.get("score", 0)
+            # Convert -1 to +1 scale to 0-100 (where 0 = neutral = 100)
+            scores["sentiment_balance"] = round(100 - abs(sentiment_score * 50), 2)
+        
+        # NEW: Rhythm score
+        rhythm_data = results.get("sentence_rhythm", {})
+        if rhythm_data:
+            scores["rhythm"] = rhythm_data.get("rhythm_score", 50)
+        
+        # Overall score (weighted average of all metrics)
         weights = {
-            "readability": 0.3,
-            "flow": 0.2,
-            "consistency": 0.25,
-            "issues": 0.25
+            "readability": 0.25,
+            "flow": 0.15,
+            "consistency": 0.20,
+            "issues": 0.20,
+            "vocabulary": 0.10,
+            "rhythm": 0.10
         }
         
         total_weight = sum(weights[k] for k in weights if k in scores)
@@ -338,6 +452,62 @@ class WritingAssistant:
             Transformation results including original, transformed text and changes
         """
         return style_transformer.transform_style(text, target_style)
+    
+    def simplify_technical(self, text: str) -> Dict[str, Any]:
+        """
+        Simplify technical jargon to plain language.
+        
+        Args:
+            text: Technical text to simplify
+        
+        Returns:
+            Simplified text with changes tracked
+        """
+        return style_transformer.transform_technical_to_plain(text)
+    
+    def improve_conciseness(self, text: str) -> Dict[str, Any]:
+        """
+        Make text more concise by removing redundancies.
+        
+        Args:
+            text: Text to make concise
+        
+        Returns:
+            Concise text with changes tracked
+        """
+        return style_transformer.enhance_conciseness(text)
+    
+    def strengthen_writing(self, text: str) -> Dict[str, Any]:
+        """
+        Strengthen writing by replacing weak verbs.
+        
+        Args:
+            text: Text to strengthen
+        
+        Returns:
+            Strengthened text with changes tracked
+        """
+        return style_transformer.strengthen_verbs(text)
+    
+    def quick_check(self, text: str) -> Dict[str, Any]:
+        """
+        Perform a quick check focusing on common issues.
+        
+        Args:
+            text: Text to check
+        
+        Returns:
+            Dictionary with quick analysis results
+        """
+        doc = self.nlp(text)
+        
+        return {
+            "passive_voice": text_analyzer.detect_passive_voice(doc),
+            "filler_words": text_analyzer.detect_filler_words(text.split()),
+            "cliches": style_transformer.detect_cliches(text),
+            "sentiment": text_analyzer.analyze_sentiment(doc),
+            "summary": f"Quick scan found potential improvements in {len(text.split())} words"
+        }
     
     def get_report(self, text: str, features: Optional[Dict[str, bool]] = None) -> str:
         """
