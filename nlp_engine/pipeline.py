@@ -108,11 +108,13 @@ class WritingAssistant:
             # Detect issues
             long_sentences = text_analyzer.detect_long_sentences(
                 analysis["sentences"], 
-                self.long_sentence_threshold
+                self.long_sentence_threshold,
+                original_text=text
             )
             repeated_words = text_analyzer.detect_repeated_words(
                 analysis["tokens"],
-                self.repeated_word_min_count
+                self.repeated_word_min_count,
+                original_text=text
             )
             sentence_structures = text_analyzer.analyze_sentence_structure(doc)
             
@@ -120,7 +122,7 @@ class WritingAssistant:
             passive_voice = text_analyzer.detect_passive_voice(doc)
             sentiment = text_analyzer.analyze_sentiment(doc)
             vocabulary_complexity = text_analyzer.analyze_vocabulary_complexity(doc, analysis["tokens"])
-            filler_words = text_analyzer.detect_filler_words(analysis["tokens"])
+            filler_words = text_analyzer.detect_filler_words(analysis["tokens"], original_text=text)
             
             results["text_analysis"]["sentence_structures"] = sentence_structures
             
@@ -191,6 +193,9 @@ class WritingAssistant:
         
         # Calculate aggregate scores
         results["scores"] = self._calculate_scores(results)
+        
+        # Aggregate all annotations for inline highlights
+        results["annotations"] = self.aggregate_annotations(results, text)
         
         return results
     
@@ -403,6 +408,126 @@ class WritingAssistant:
         
         return base_analysis
     
+    @staticmethod
+    def aggregate_annotations(results: Dict[str, Any], text: str) -> List[Dict[str, Any]]:
+        """
+        Collect all position-based issues from every NLP module into a single
+        sorted annotation list for the frontend inline-highlight renderer.
+
+        Each annotation has the schema:
+            {type, start, end, text, message, severity, suggestion, category}
+        """
+        annotations: List[Dict[str, Any]] = []
+
+        def _add(start, end, msg, severity, suggestion, category):
+            """Helper to append an annotation if offsets are valid."""
+            if start is None or end is None or start < 0 or end < 0:
+                return
+            annotations.append({
+                "type": category,
+                "start": int(start),
+                "end": int(end),
+                "text": text[int(start):int(end)] if int(end) <= len(text) else "",
+                "message": msg,
+                "severity": severity or "info",
+                "suggestion": suggestion or "",
+                "category": category,
+            })
+
+        # 1. Grammar issues (grammar_checker — already have start_offset / end_offset)
+        for issue in results.get("grammar_analysis", {}).get("all_issues", []):
+            _add(
+                issue.get("start_offset"),
+                issue.get("end_offset"),
+                issue.get("issue", "Grammar issue"),
+                issue.get("severity", "warning"),
+                issue.get("suggestion"),
+                "grammar",
+            )
+
+        # 2. Passive voice instances
+        for pv in results.get("passive_voice", {}).get("passive_instances", []):
+            _add(
+                pv.get("start_offset"),
+                pv.get("end_offset"),
+                f"Passive voice: {', '.join(pv.get('passive_constructions', []))}",
+                pv.get("severity", "medium"),
+                pv.get("suggestion", "Consider active voice"),
+                "passive",
+            )
+
+        # 3. Filler word occurrences
+        for occ in results.get("filler_words", {}).get("occurrences", []):
+            _add(
+                occ.get("start_offset"),
+                occ.get("end_offset"),
+                f"Filler word: '{occ.get('filler', '')}'",
+                "low",
+                "Remove this filler word for more concise writing",
+                "filler",
+            )
+
+        # 4. Cliché occurrences
+        for cl in results.get("cliches", {}).get("cliches", []):
+            _add(
+                cl.get("start_offset"),
+                cl.get("end_offset"),
+                f"Cliché: '{cl.get('cliche', '')}'",
+                "medium",
+                cl.get("suggestion", "Replace with original phrasing"),
+                "cliche",
+            )
+
+        # 5. Long sentences
+        for ls in results.get("issues", {}).get("long_sentences", []):
+            _add(
+                ls.get("start_offset"),
+                ls.get("end_offset"),
+                f"Long sentence ({ls.get('word_count', '?')} words, {ls.get('excess', '?')} over limit)",
+                ls.get("severity", "medium"),
+                "Break into shorter sentences for readability",
+                "style",
+            )
+
+        # 6. Tense consistency issues
+        for ti in results.get("consistency", {}).get("tense", {}).get("issues", []):
+            _add(
+                ti.get("start_offset"),
+                ti.get("end_offset"),
+                f"Tense shift: uses '{ti.get('tense')}' but document is '{ti.get('expected')}'",
+                ti.get("severity", "medium"),
+                f"Consider using {ti.get('expected', 'dominant')} tense for consistency",
+                "tense",
+            )
+
+        # 7. Perspective shifts
+        for ps in results.get("consistency", {}).get("perspective", {}).get("perspective_shifts", []):
+            _add(
+                ps.get("start_offset"),
+                ps.get("end_offset"),
+                f"Perspective shift: {ps.get('from_perspective')} → {ps.get('to_perspective')}",
+                ps.get("severity", "medium"),
+                "Maintain consistent narrative perspective",
+                "perspective",
+            )
+
+        # 8. Repeated words (from occurrences sub-list)
+        for rw in results.get("issues", {}).get("repeated_words", []):
+            word = rw.get("word", "")
+            for occ in rw.get("occurrences", []):
+                _add(
+                    occ.get("start_offset"),
+                    occ.get("end_offset"),
+                    f"Repeated word: '{word}' (appears {rw.get('count', '?')} times)",
+                    rw.get("severity", "medium"),
+                    f"Consider a synonym or restructure to reduce repetition of '{word}'",
+                    "repetition",
+                )
+
+        # Sort by position
+        annotations.sort(key=lambda a: (a["start"], a["end"]))
+        return annotations
+
     def _calculate_scores(self, results: Dict[str, Any]) -> Dict[str, Any]:
         """Calculate aggregate scores from analysis results."""
         scores = {}
@@ -554,7 +679,7 @@ class WritingAssistant:
                 "passive_percentage": round((len(passive_list) / sentence_count * 100) if sentence_count > 0 else 0, 1),
                 "passive_instances": passive_list
             },
-            "filler_words": text_analyzer.detect_filler_words(text.split()),
+            "filler_words": text_analyzer.detect_filler_words(text.split(), original_text=text),
             "cliches": style_transformer.detect_cliches(text),
             "sentiment": text_analyzer.analyze_sentiment(doc),
             "summary": f"Quick scan found potential improvements in {len(text.split())} words"

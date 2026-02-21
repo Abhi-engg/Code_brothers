@@ -762,6 +762,8 @@ def detect_cliches(text: str) -> Dict[str, Any]:
                 found_cliches.append({
                     "cliche": cliche,
                     "position": pos,
+                    "start_offset": pos,
+                    "end_offset": pos + len(cliche),
                     "context": "..." + context + "...",
                     "suggestion": "Consider rephrasing with original language"
                 })

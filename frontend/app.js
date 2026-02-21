@@ -12,7 +12,7 @@ const CONFIG = {
 
 // State
 let analysisResults = null;
-let currentTab = 'overview';
+let currentTab = 'write';
 
 // DOM Elements
 const elements = {
@@ -299,6 +299,9 @@ function renderTab(tabName) {
     let content = '';
     
     switch (tabName) {
+        case 'write':
+            content = renderWrite();
+            break;
         case 'overview':
             content = renderOverview();
             break;
@@ -332,6 +335,221 @@ function renderTab(tabName) {
     requestAnimationFrame(() => {
         elements.tabContent.style.transition = 'opacity 0.3s ease';
         elements.tabContent.style.opacity = '1';
+    });
+    
+    // Post-render binding for Write tab
+    if (tabName === 'write') {
+        bindWriteTabEvents();
+    }
+}
+
+// ════════════════════════════════════════════════════
+// Render Write Tab — Inline Annotated Text (Phase 6)
+// ════════════════════════════════════════════════════
+
+// Category metadata for display
+const ANN_CATEGORIES = {
+    grammar:     { label: 'Grammar',     icon: '🔤', color: '#EF4444' },
+    passive:     { label: 'Passive',     icon: '🔀', color: '#F97316' },
+    filler:      { label: 'Filler',      icon: '🗑️', color: '#EAB308' },
+    cliche:      { label: 'Cliché',      icon: '🔁', color: '#A855F7' },
+    style:       { label: 'Style',       icon: '📏', color: '#3B82F6' },
+    tense:       { label: 'Tense',       icon: '⏱️', color: '#14B8A6' },
+    perspective: { label: 'Perspective', icon: '👁️', color: '#EC4899' },
+    repetition:  { label: 'Repetition',  icon: '🔂', color: '#6B7280' },
+};
+
+// Track which categories are visible
+let annVisibleCategories = new Set(Object.keys(ANN_CATEGORIES));
+
+function renderWrite() {
+    const annotations = analysisResults.annotations || [];
+    const text = analysisResults.input?.text || '';
+
+    // Count per category
+    const counts = {};
+    for (const a of annotations) {
+        counts[a.category] = (counts[a.category] || 0) + 1;
+    }
+    const totalCount = annotations.length;
+
+    // Build filter bar
+    let filterBar = '<div class="ann-filter-bar">';
+    for (const [cat, meta] of Object.entries(ANN_CATEGORIES)) {
+        const c = counts[cat] || 0;
+        if (c === 0) continue;
+        const isActive = annVisibleCategories.has(cat);
+        filterBar += `
+            <button class="ann-filter-btn ann-filter-${cat} ${isActive ? 'active' : 'inactive'}"
+                    data-cat="${cat}" title="Toggle ${meta.label}">
+                <span>${meta.icon} ${meta.label}</span>
+                <span class="ann-count">${c}</span>
+            </button>`;
+    }
+    filterBar += '</div>';
+
+    // Summary line
+    const summaryLine = `
+        <div class="ann-summary">
+            <strong>${totalCount}</strong> annotation${totalCount !== 1 ? 's' : ''} found
+            &nbsp;·&nbsp; Hover highlighted text for details
+        </div>`;
+
+    // Build annotated text HTML
+    const annotatedHTML = buildAnnotatedHTML(text, annotations);
+
+    return `
+        <div class="space-y-4 animate-fade-in">
+            <div class="flex items-center justify-between mb-2">
+                <h3 class="font-semibold text-gray-900 text-lg flex items-center">
+                    <span class="text-2xl mr-2">✍️</span> Annotated Manuscript
+                </h3>
+                <span class="text-xs text-gray-400">${text.length} chars</span>
+            </div>
+            ${summaryLine}
+            ${filterBar}
+            <div class="annotated-text" id="annotated-text-area">
+                ${annotatedHTML}
+            </div>
+        </div>`;
+}
+
+/**
+ * Build HTML string with annotation spans inserted at the correct positions.
+ * Handles overlapping annotations by flattening them — if two annotations
+ * overlap the same character range, both CSS classes are applied.
+ */
+function buildAnnotatedHTML(text, annotations) {
+    if (!annotations || annotations.length === 0) return _esc(text);
+
+    // Filter to only visible categories
+    const visible = annotations.filter(a => annVisibleCategories.has(a.category));
+
+    // Create sorted, non-overlapping segments with annotation data.
+    // Each char position maps to a set of annotations covering it.
+    // For performance, we use an event-based sweep approach.
+    const events = []; // {pos, type: 'open'|'close', ann}
+
+    for (let i = 0; i < visible.length; i++) {
+        const a = visible[i];
+        if (a.start == null || a.end == null || a.start >= a.end) continue;
+        const start = Math.max(0, Math.min(a.start, text.length));
+        const end = Math.max(0, Math.min(a.end, text.length));
+        events.push({ pos: start, type: 'open', ann: a, idx: i });
+        events.push({ pos: end, type: 'close', ann: a, idx: i });
+    }
+
+    // Sort events: by position, then closes before opens at same pos
+    events.sort((a, b) => a.pos - b.pos || (a.type === 'close' ? -1 : 1));
+
+    let html = '';
+    let cursor = 0;
+    const activeSet = new Map(); // idx → ann
+
+    for (const ev of events) {
+        // Emit text from cursor to this event position
+        if (ev.pos > cursor) {
+            if (activeSet.size > 0) {
+                html += wrapAnnotatedSegment(text.slice(cursor, ev.pos), activeSet);
+            } else {
+                html += _esc(text.slice(cursor, ev.pos));
+            }
+            cursor = ev.pos;
+        }
+
+        if (ev.type === 'open') {
+            // Close current span if any, re-open with new set
+            activeSet.set(ev.idx, ev.ann);
+        } else {
+            activeSet.delete(ev.idx);
+        }
+    }
+
+    // Remaining text after last event
+    if (cursor < text.length) {
+        html += _esc(text.slice(cursor));
+    }
+
+    return html;
+}
+
+/**
+ * Wrap a text segment with annotation span(s).
+ * If multiple annotations overlap, we pick the highest-severity one for
+ * the primary style but show all in the tooltip.
+ */
+function wrapAnnotatedSegment(segment, activeMap) {
+    const anns = Array.from(activeMap.values());
+    // Pick primary annotation (highest severity wins)
+    const sevOrder = { error: 0, high: 1, warning: 2, medium: 3, info: 4, low: 5 };
+    anns.sort((a, b) => (sevOrder[a.severity] ?? 9) - (sevOrder[b.severity] ?? 9));
+    const primary = anns[0];
+
+    const classes = ['ann', `ann-${primary.category}`];
+
+    // Build tooltip content (all overlapping annotations)
+    let tooltipInner = '';
+    for (const a of anns) {
+        const cat = ANN_CATEGORIES[a.category] || { label: a.category, icon: '📌' };
+        tooltipInner += `
+            <div style="margin-bottom:6px">
+                <span class="ann-tooltip-cat ann-tooltip-cat-${a.category}">${cat.icon} ${cat.label}</span>
+                <span class="severity-badge severity-${a.severity}">${a.severity}</span>
+                <div class="ann-tooltip-msg">${_esc(a.message)}</div>
+                ${a.suggestion ? `<div class="ann-tooltip-suggestion">💡 ${_esc(a.suggestion)}</div>` : ''}
+            </div>`;
+    }
+
+    // Action buttons (only if primary has a suggestion)
+    let actions = '';
+    if (primary.suggestion) {
+        actions = `
+            <div class="ann-tooltip-actions">
+                <button class="ann-btn-dismiss" data-action="dismiss" data-ann-start="${primary.start}" data-ann-end="${primary.end}">Dismiss</button>
+            </div>`;
+    }
+
+    return `<span class="${classes.join(' ')}">${_esc(segment)}<span class="ann-tooltip">${tooltipInner}${actions}</span></span>`;
+}
+
+/**
+ * Bind click events for filter buttons and dismiss/accept actions
+ * after the Write tab DOM is rendered.
+ */
+function bindWriteTabEvents() {
+    // Filter buttons
+    document.querySelectorAll('.ann-filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const cat = btn.dataset.cat;
+            if (annVisibleCategories.has(cat)) {
+                annVisibleCategories.delete(cat);
+            } else {
+                annVisibleCategories.add(cat);
+            }
+            // Re-render only the annotated area + filters
+            const writeHTML = renderWrite();
+            elements.tabContent.innerHTML = writeHTML;
+            bindWriteTabEvents();
+        });
+    });
+
+    // Dismiss buttons inside tooltips
+    document.querySelectorAll('.ann-btn-dismiss').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const start = parseInt(btn.dataset.annStart);
+            const end = parseInt(btn.dataset.annEnd);
+            // Remove matching annotation from results
+            if (analysisResults.annotations) {
+                analysisResults.annotations = analysisResults.annotations.filter(
+                    a => !(a.start === start && a.end === end)
+                );
+            }
+            // Re-render
+            const writeHTML = renderWrite();
+            elements.tabContent.innerHTML = writeHTML;
+            bindWriteTabEvents();
+        });
     });
 }
 

@@ -189,6 +189,8 @@ async def analyze_endpoint(request: AnalysisRequest):
             sentence_rhythm=results.get("sentence_rhythm"),
             # Narrative tracker (Phase 5)
             narrative_tracker=results.get("narrative_tracker"),
+            # Inline annotations (Phase 6)
+            annotations=results.get("annotations"),
         )
         
     except Exception as e:

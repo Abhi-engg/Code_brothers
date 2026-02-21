@@ -149,6 +149,8 @@ class AnalysisResponse(BaseModel):
     sentence_rhythm: Optional[Dict[str, Any]] = None
     # Narrative tracker (Phase 5)
     narrative_tracker: Optional[Dict[str, Any]] = None
+    # Inline annotations (Phase 6)
+    annotations: Optional[List[Dict[str, Any]]] = None
     
     class Config:
         json_schema_extra = {

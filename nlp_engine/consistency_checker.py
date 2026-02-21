@@ -1175,7 +1175,9 @@ def check_tense_consistency(doc) -> Dict[str, Any]:
             "sentence_index": sent_idx,
             "sentence": sent.text.strip(),
             "tenses": sentence_tenses,
-            "main_tense": main_tense
+            "main_tense": main_tense,
+            "start_offset": sent.start_char,
+            "end_offset": sent.end_char,
         })
     
     # Identify dominant tense in document
@@ -1201,7 +1203,9 @@ def check_tense_consistency(doc) -> Dict[str, Any]:
                     "sentence": sent_data["sentence"][:100] + "..." if len(sent_data["sentence"]) > 100 else sent_data["sentence"],
                     "tense": sent_data["main_tense"],
                     "expected": dominant_tense,
-                    "severity": "medium"
+                    "severity": "medium",
+                    "start_offset": sent_data["start_offset"],
+                    "end_offset": sent_data["end_offset"],
                 })
     
     # Calculate consistency score
@@ -1273,7 +1277,9 @@ def check_perspective_consistency(doc) -> Dict[str, Any]:
             "first_person": first_count,
             "second_person": second_count,
             "third_person": third_count,
-            "main_perspective": main_perspective if any(counts.values()) else None
+            "main_perspective": main_perspective if any(counts.values()) else None,
+            "start_offset": sent.start_char,
+            "end_offset": sent.end_char,
         })
     
     # Identify dominant perspective
@@ -1302,7 +1308,9 @@ def check_perspective_consistency(doc) -> Dict[str, Any]:
                 "sentence": sent_data["sentence"][:100] + "..." if len(sent_data["sentence"]) > 100 else sent_data["sentence"],
                 "from_perspective": prev_perspective,
                 "to_perspective": curr_perspective,
-                "severity": "medium"
+                "severity": "medium",
+                "start_offset": sent_data["start_offset"],
+                "end_offset": sent_data["end_offset"],
             })
         
         if curr_perspective:

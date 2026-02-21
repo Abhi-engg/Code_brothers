@@ -602,3 +602,246 @@ button:active::before {
     width: 200px;
     height: 200px;
 }
+
+/* ════════════════════════════════════════════════════
+   Phase 6 — Inline Annotation Highlights
+   ════════════════════════════════════════════════════ */
+
+/* Annotated text container */
+.annotated-text {
+    font-family: 'Georgia', 'Times New Roman', serif;
+    font-size: 1.05rem;
+    line-height: 1.85;
+    white-space: pre-wrap;
+    word-break: break-word;
+    padding: 1.5rem;
+    background: #FAFAF9;
+    border-radius: 0.75rem;
+    border: 1px solid #E7E5E4;
+    min-height: 200px;
+    position: relative;
+}
+
+/* Base annotation highlight */
+.ann {
+    position: relative;
+    cursor: pointer;
+    border-radius: 2px;
+    padding: 1px 0;
+    transition: background-color 0.2s, box-shadow 0.2s;
+}
+.ann:hover {
+    box-shadow: 0 0 0 2px currentColor;
+    z-index: 2;
+}
+
+/* Category-specific colors */
+.ann-grammar {
+    background-color: rgba(239, 68, 68, 0.18);
+    border-bottom: 2px wavy #EF4444;
+    color: inherit;
+}
+.ann-passive {
+    background-color: rgba(249, 115, 22, 0.15);
+    border-bottom: 2px wavy #F97316;
+    color: inherit;
+}
+.ann-filler {
+    background-color: rgba(234, 179, 8, 0.18);
+    border-bottom: 2px dashed #EAB308;
+    color: inherit;
+}
+.ann-cliche {
+    background-color: rgba(168, 85, 247, 0.15);
+    border-bottom: 2px wavy #A855F7;
+    color: inherit;
+}
+.ann-style {
+    background-color: rgba(59, 130, 246, 0.12);
+    border-bottom: 2px dashed #3B82F6;
+    color: inherit;
+}
+.ann-tense {
+    background-color: rgba(20, 184, 166, 0.15);
+    border-bottom: 2px wavy #14B8A6;
+    color: inherit;
+}
+.ann-perspective {
+    background-color: rgba(236, 72, 153, 0.15);
+    border-bottom: 2px wavy #EC4899;
+    color: inherit;
+}
+.ann-repetition {
+    background-color: rgba(107, 114, 128, 0.15);
+    border-bottom: 2px dotted #6B7280;
+    color: inherit;
+}
+
+/* Tooltip */
+.ann-tooltip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    min-width: 240px;
+    max-width: 360px;
+    background: #1E293B;
+    color: #F8FAFC;
+    border-radius: 0.5rem;
+    padding: 0.75rem 1rem;
+    font-family: system-ui, sans-serif;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.25);
+    z-index: 100;
+    pointer-events: auto;
+    white-space: normal;
+}
+.ann-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: #1E293B;
+}
+.ann:hover .ann-tooltip,
+.ann.active .ann-tooltip {
+    display: block;
+}
+
+/* Tooltip internals */
+.ann-tooltip-cat {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 2px 6px;
+    border-radius: 3px;
+    margin-bottom: 4px;
+}
+.ann-tooltip-cat-grammar   { background: #EF4444; }
+.ann-tooltip-cat-passive   { background: #F97316; }
+.ann-tooltip-cat-filler    { background: #EAB308; color: #1E293B; }
+.ann-tooltip-cat-cliche    { background: #A855F7; }
+.ann-tooltip-cat-style     { background: #3B82F6; }
+.ann-tooltip-cat-tense     { background: #14B8A6; }
+.ann-tooltip-cat-perspective { background: #EC4899; }
+.ann-tooltip-cat-repetition{ background: #6B7280; }
+
+.ann-tooltip-msg {
+    margin: 4px 0 6px;
+}
+.ann-tooltip-suggestion {
+    font-style: italic;
+    opacity: 0.85;
+    margin-bottom: 6px;
+}
+
+/* Severity badges */
+.severity-badge {
+    display: inline-block;
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+.severity-error   { background: #FEE2E2; color: #991B1B; }
+.severity-high    { background: #FEE2E2; color: #991B1B; }
+.severity-warning { background: #FEF3C7; color: #92400E; }
+.severity-medium  { background: #FEF3C7; color: #92400E; }
+.severity-info    { background: #DBEAFE; color: #1E40AF; }
+.severity-low     { background: #D1FAE5; color: #065F46; }
+
+/* Accept / dismiss buttons inside tooltip */
+.ann-tooltip-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+}
+.ann-tooltip-actions button {
+    flex: 1;
+    padding: 4px 8px;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.15s;
+}
+.ann-tooltip-actions button:hover { opacity: 0.85; }
+.ann-btn-accept {
+    background: #22C55E;
+    color: #fff;
+}
+.ann-btn-dismiss {
+    background: #64748B;
+    color: #fff;
+}
+
+/* Category filter toggles bar */
+.ann-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 1rem;
+}
+.ann-filter-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    border: 2px solid currentColor;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: transparent;
+    transition: background-color 0.15s, opacity 0.15s;
+}
+.ann-filter-btn.active {
+    background-color: currentColor;
+}
+.ann-filter-btn.active span {
+    color: #fff;
+}
+.ann-filter-btn.inactive {
+    opacity: 0.4;
+}
+.ann-filter-btn .ann-count {
+    font-size: 0.65rem;
+    font-weight: 700;
+    background: rgba(0,0,0,0.12);
+    padding: 1px 5px;
+    border-radius: 999px;
+}
+
+/* Category colors for filter buttons */
+.ann-filter-grammar     { color: #EF4444; }
+.ann-filter-passive     { color: #F97316; }
+.ann-filter-filler      { color: #EAB308; }
+.ann-filter-cliche      { color: #A855F7; }
+.ann-filter-style       { color: #3B82F6; }
+.ann-filter-tense       { color: #14B8A6; }
+.ann-filter-perspective { color: #EC4899; }
+.ann-filter-repetition  { color: #6B7280; }
+
+/* Summary stats line */
+.ann-summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.82rem;
+    color: #64748B;
+    margin-bottom: 0.75rem;
+}
+.ann-summary strong {
+    color: #1E293B;
+    font-size: 1.05rem;
+}

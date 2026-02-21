@@ -52,35 +52,49 @@ def analyze(text: str) -> Dict[str, Any]:
     }
 
 
-def detect_long_sentences(sentences: List[str], threshold: int = 100) -> List[Dict[str, Any]]:
+def detect_long_sentences(sentences: List[str], threshold: int = 100,
+                          original_text: str = "") -> List[Dict[str, Any]]:
     """
     Detect sentences that exceed the word count threshold.
     
     Args:
         sentences: List of sentence strings
         threshold: Maximum acceptable word count (default: 100)
+        original_text: Full original text (used for character offsets)
         
     Returns:
-        List of dictionaries with long sentence info
+        List of dictionaries with long sentence info including start/end offsets
     """
     long_sentences = []
+    search_start = 0
     
     for idx, sentence in enumerate(sentences):
         word_count = len(sentence.split())
+        # Compute character offsets from original text
+        start_offset = original_text.find(sentence, search_start) if original_text else -1
+        end_offset = start_offset + len(sentence) if start_offset >= 0 else -1
+        if start_offset >= 0:
+            search_start = end_offset
+
         if word_count >= threshold:
-            long_sentences.append({
+            entry = {
                 "index": idx,
                 "sentence": sentence,
                 "word_count": word_count,
                 "excess": word_count - threshold,
-                "severity": "high" if word_count >= threshold * 1.5 else "medium"
-            })
+                "severity": "high" if word_count >= threshold * 1.5 else "medium",
+            }
+            if start_offset >= 0:
+                entry["start_offset"] = start_offset
+                entry["end_offset"] = end_offset
+            long_sentences.append(entry)
     
     return long_sentences
 
 
 def detect_repeated_words(tokens: List[str], min_count: int = 3, 
-                          exclude_common: bool = True) -> List[Dict[str, Any]]:
+                          exclude_common: bool = True,
+                          original_text: str = "") -> List[Dict[str, Any]]:
     """
     Find words that appear too frequently in the text.
     
@@ -88,9 +102,10 @@ def detect_repeated_words(tokens: List[str], min_count: int = 3,
         tokens: List of token strings
         min_count: Minimum occurrences to flag as repeated
         exclude_common: Whether to exclude common words (articles, prepositions, etc.)
+        original_text: Full original text (used to compute occurrence offsets)
         
     Returns:
-        List of dictionaries with repeated word info
+        List of dictionaries with repeated word info and occurrence offsets
     """
     # Common words to exclude from repetition detection
     common_words = {
@@ -111,17 +126,29 @@ def detect_repeated_words(tokens: List[str], min_count: int = 3,
     # Count occurrences
     word_counts = Counter(normalized_tokens)
     
+    # Pre-compute occurrence offsets using regex for each flagged word
+    import re as _re
+    text_lower = original_text.lower() if original_text else ""
+
     repeated_words = []
     for word, count in word_counts.most_common():
         if count >= min_count:
             if exclude_common and word in common_words:
                 continue
-            repeated_words.append({
+            entry = {
                 "word": word,
                 "count": count,
                 "frequency": round(count / len(normalized_tokens) * 100, 2) if normalized_tokens else 0,
-                "severity": "high" if count >= min_count * 2 else "medium"
-            })
+                "severity": "high" if count >= min_count * 2 else "medium",
+            }
+            # Add character offsets for each occurrence
+            if original_text:
+                occurrences = [
+                    {"start_offset": m.start(), "end_offset": m.end()}
+                    for m in _re.finditer(r'\b' + _re.escape(word) + r'\b', text_lower)
+                ]
+                entry["occurrences"] = occurrences
+            repeated_words.append(entry)
     
     return repeated_words
 
@@ -163,7 +190,9 @@ def analyze_sentence_structure(doc) -> List[Dict[str, Any]]:
             "type": sentence_type,
             "has_subordinate_clause": subordinate_conjunctions > 0,
             "complexity": "complex" if subordinate_conjunctions > 0 else 
-                         "compound" if coordinating_conjunctions > 0 else "simple"
+                         "compound" if coordinating_conjunctions > 0 else "simple",
+            "start_offset": sent.start_char,
+            "end_offset": sent.end_char,
         })
     
     return structures
@@ -208,7 +237,9 @@ def detect_passive_voice(doc) -> List[Dict[str, Any]]:
                 "sentence": sent.text.strip(),
                 "passive_constructions": passive_verbs,
                 "severity": "medium",
-                "suggestion": "Consider using active voice for clearer, more direct writing"
+                "suggestion": "Consider using active voice for clearer, more direct writing",
+                "start_offset": sent.start_char,
+                "end_offset": sent.end_char,
             })
     
     return passive_sentences
@@ -417,16 +448,19 @@ def analyze_vocabulary_complexity(doc, tokens: List[str]) -> Dict[str, Any]:
     }
 
 
-def detect_filler_words(tokens: List[str]) -> Dict[str, Any]:
+def detect_filler_words(tokens: List[str], original_text: str = "") -> Dict[str, Any]:
     """
     Detect filler words and phrases that weaken writing.
     
     Args:
         tokens: List of token strings
+        original_text: Full original text (used to compute character offsets)
         
     Returns:
-        Dictionary with filler word analysis
+        Dictionary with filler word analysis including occurrence offsets
     """
+    import re as _re
+
     filler_words = {
         'just', 'really', 'very', 'quite', 'rather', 'somewhat', 'somehow',
         'actually', 'basically', 'literally', 'seriously', 'honestly',
@@ -445,8 +479,9 @@ def detect_filler_words(tokens: List[str]) -> Dict[str, Any]:
     text_lower = ' '.join(tokens).lower()
     found_fillers = {}
     total_count = 0
+    occurrences: List[Dict[str, Any]] = []
     
-    # Count individual filler words
+    # Count individual filler words and collect offsets
     for word in tokens:
         word_lower = word.lower()
         if word_lower in filler_words:
@@ -460,6 +495,18 @@ def detect_filler_words(tokens: List[str]) -> Dict[str, Any]:
             found_fillers[phrase] = count
             total_count += count
     
+    # Compute character offsets from original_text for every filler
+    if original_text:
+        orig_lower = original_text.lower()
+        for filler in found_fillers:
+            for m in _re.finditer(r'\b' + _re.escape(filler) + r'\b', orig_lower):
+                occurrences.append({
+                    "filler": filler,
+                    "start_offset": m.start(),
+                    "end_offset": m.end(),
+                })
+        occurrences.sort(key=lambda o: o["start_offset"])
+
     severity = "high" if total_count > 10 else "medium" if total_count > 5 else "low"
     
     return {
@@ -467,5 +514,6 @@ def detect_filler_words(tokens: List[str]) -> Dict[str, Any]:
         "unique_fillers": len(found_fillers),
         "filler_details": dict(sorted(found_fillers.items(), key=lambda x: x[1], reverse=True)[:10]),
         "severity": severity,
-        "suggestion": "Remove unnecessary filler words to make writing more concise and impactful" if total_count > 0 else None
+        "suggestion": "Remove unnecessary filler words to make writing more concise and impactful" if total_count > 0 else None,
+        "occurrences": occurrences,
     }
