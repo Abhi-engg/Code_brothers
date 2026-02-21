@@ -534,7 +534,7 @@ function renderEnhancements() {
     if (vocabulary_complexity) {
         const diversity = vocabulary_complexity.lexical_diversity || 0;
         const level = vocabulary_complexity.complexity_level || 'basic';
-        const advancedWords = vocabulary_complexity.advanced_word_count || 0;
+        const advancedWords = vocabulary_complexity.advanced_words || 0;
         
         html += `
             <div class="feature-card border-l-4 border-purple-500">
@@ -566,9 +566,9 @@ function renderEnhancements() {
     
     // Filler Words
     if (filler_words) {
-        const totalFillers = filler_words.total_count || 0;
-        const uniqueFillers = filler_words.unique_count || 0;
-        const fillersList = filler_words.fillers || [];
+        const totalFillers = filler_words.total_fillers || 0;
+        const uniqueFillers = filler_words.unique_fillers || 0;
+        const fillersList = filler_words.filler_details || {};
         
         html += `
             <div class="feature-card border-l-4 border-yellow-500">
@@ -586,7 +586,7 @@ function renderEnhancements() {
                             <strong>${uniqueFillers}</strong> unique filler words detected
                         </div>
                         <div class="flex flex-wrap gap-2">
-                            ${Object.entries(fillersList.slice(0, 15)).map(([word, count]) => `
+                            ${Object.entries(fillersList).slice(0, 15).map(([word, count]) => `
                                 <span class="px-3 py-1 bg-yellow-200 text-yellow-900 rounded-full text-sm">
                                     ${word} <span class="font-bold ml-1">×${count}</span>
                                 </span>
@@ -606,7 +606,7 @@ function renderEnhancements() {
     // Clichés
     if (cliches) {
         const clichesList = cliches.cliches || [];
-        const clicheCount = cliches.cliche_count || 0;
+        const clicheCount = cliches.cliches_found || 0;
         
         html += `
             <div class="feature-card border-l-4 border-pink-500">
@@ -645,7 +645,7 @@ function renderEnhancements() {
     
     // Paragraph Structure
     if (paragraph_structure) {
-        const avgLength = paragraph_structure.avg_paragraph_length || 0;
+        const avgLength = paragraph_structure.average_words_per_paragraph || 0;
         const paragraphs = paragraph_structure.paragraph_count || 0;
         
         html += `
@@ -675,8 +675,8 @@ function renderEnhancements() {
     // Lexical Density
     if (lexical_density) {
         const density = lexical_density.lexical_density || 0;
-        const contentWords = lexical_density.content_word_count || 0;
-        const totalWords = lexical_density.total_word_count || 0;
+        const contentWords = lexical_density.content_words || 0;
+        const totalWords = lexical_density.total_words || 0;
         
         html += `
             <div class="feature-card border-l-4 border-teal-500">
@@ -707,7 +707,7 @@ function renderEnhancements() {
     
     // Sentence Rhythm
     if (sentence_rhythm) {
-        const pattern = sentence_rhythm.rhythm_pattern || 'unknown';
+        const pattern = sentence_rhythm.pattern || 'unknown';
         const score = sentence_rhythm.rhythm_score || 0;
         
         html += `

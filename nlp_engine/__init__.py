@@ -20,7 +20,7 @@ Usage:
     results = analyze_text("Your text here...")
 """
 
-from .test_pipeline import WritingAssistant, analyze_text
+from .pipeline import WritingAssistant, analyze_text
 from .consistency_checker import NarrativeConsistencyAnalyzer
 
 # Module-level exports for direct access

@@ -123,7 +123,13 @@ class WritingAssistant:
             results["text_analysis"]["sentence_structures"] = sentence_structures
             
             # Store enhanced features at top level for API response
-            results["passive_voice"] = passive_voice
+            # Wrap passive voice list in dict with stats for frontend
+            sentence_count = len(list(doc.sents))
+            results["passive_voice"] = {
+                "passive_count": len(passive_voice),
+                "passive_percentage": round((len(passive_voice) / sentence_count * 100) if sentence_count > 0 else 0, 1),
+                "passive_instances": passive_voice
+            }
             results["sentiment"] = sentiment
             results["vocabulary_complexity"] = vocabulary_complexity
             results["filler_words"] = filler_words
@@ -501,8 +507,14 @@ class WritingAssistant:
         """
         doc = self.nlp(text)
         
+        passive_list = text_analyzer.detect_passive_voice(doc)
+        sentence_count = len(list(doc.sents))
         return {
-            "passive_voice": text_analyzer.detect_passive_voice(doc),
+            "passive_voice": {
+                "passive_count": len(passive_list),
+                "passive_percentage": round((len(passive_list) / sentence_count * 100) if sentence_count > 0 else 0, 1),
+                "passive_instances": passive_list
+            },
             "filler_words": text_analyzer.detect_filler_words(text.split()),
             "cliches": style_transformer.detect_cliches(text),
             "sentiment": text_analyzer.analyze_sentiment(doc),

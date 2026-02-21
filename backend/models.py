@@ -30,7 +30,7 @@ class AnalysisRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=50000, description="Text to analyze")
     features: Optional[FeatureToggles] = Field(default=None, description="Feature toggles")
     target_style: Optional[TargetStyle] = Field(default=TargetStyle.FORMAL, description="Target style for transformation")
-    long_sentence_threshold: Optional[int] = Field(default=100, ge=20, le=200, description="Word count threshold for long sentences")
+    long_sentence_threshold: Optional[int] = Field(default=25, ge=10, le=200, description="Word count threshold for long sentences")
     repeated_word_min_count: Optional[int] = Field(default=3, ge=2, le=10, description="Minimum count for repeated word detection")
     
     class Config:
@@ -47,7 +47,7 @@ class AnalysisRequest(BaseModel):
                     "explanations": True
                 },
                 "target_style": "formal",
-                "long_sentence_threshold": 100,
+                "long_sentence_threshold": 25,
                 "repeated_word_min_count": 3
             }
         }

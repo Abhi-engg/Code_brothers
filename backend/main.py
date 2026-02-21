@@ -37,14 +37,14 @@ consistency_analyzer: Optional[NarrativeConsistencyAnalyzer] = None
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown"""
     global assistant, consistency_analyzer
-    print("🚀 Starting Writing Assistant API...")
-    print("📚 Loading spaCy model...")
+    print("Starting Writing Assistant API...")
+    print("Loading spaCy model...")
     assistant = WritingAssistant()
     consistency_analyzer = NarrativeConsistencyAnalyzer()
-    print("✅ NLP Engine ready!")
-    print("✅ Narrative Consistency Analyzer ready!")
+    print("NLP Engine ready!")
+    print("Narrative Consistency Analyzer ready!")
     yield
-    print("👋 Shutting down Writing Assistant API...")
+    print("Shutting down Writing Assistant API...")
 
 
 # Create FastAPI app
