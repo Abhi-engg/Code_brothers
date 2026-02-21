@@ -426,3 +426,285 @@ def get_consistency_assessment(score: float) -> str:
         return "Fair - Several consistency issues detected"
     else:
         return "Needs Improvement - Significant consistency problems found"
+
+
+class NarrativeConsistencyAnalyzer:
+    """
+    Class-based Narrative Consistency Analyzer for AI writing assistant.
+    
+    Detects inconsistencies in long-form writing like stories or scripts:
+    - Same character referenced with different names
+    - Pronoun confusion
+    - Sudden new entities without introduction
+    
+    Uses spaCy for NLP processing.
+    """
+    
+    def __init__(self):
+        """Initialize the analyzer with spaCy model."""
+        import spacy
+        try:
+            self.nlp = spacy.load("en_core_web_sm")
+        except OSError:
+            from spacy.cli import download
+            download("en_core_web_sm")
+            self.nlp = spacy.load("en_core_web_sm")
+        
+        # Character memory dictionary to track entities across document
+        self.character_memory = {}
+    
+    def analyze_consistency(self, text: str) -> List[Dict[str, str]]:
+        """
+        Analyze text for narrative consistency issues.
+        
+        Args:
+            text: Input text to analyze
+            
+        Returns:
+            List of issues in format:
+            [
+                {
+                    "issue": "Issue type",
+                    "original_text": "Problematic text",
+                    "suggestion": "How to fix",
+                    "explanation": "Why this is an issue"
+                }
+            ]
+        """
+        # Reset character memory for new analysis
+        self.character_memory = {}
+        issues = []
+        
+        # Process text with spaCy
+        doc = self.nlp(text)
+        
+        # Extract entities
+        entities = [(ent.text, ent.label_) for ent in doc.ents]
+        
+        # Track characters and build memory
+        self._build_character_memory(doc)
+        
+        # Check for name variations
+        name_variation_issues = self._check_name_variations(doc)
+        issues.extend(name_variation_issues)
+        
+        # Check for pronoun confusion
+        pronoun_issues = self._check_pronoun_confusion(doc)
+        issues.extend(pronoun_issues)
+        
+        # Check for abrupt entity introductions
+        introduction_issues = self._check_abrupt_introductions(doc)
+        issues.extend(introduction_issues)
+        
+        # Check for entity type conflicts
+        type_conflict_issues = self._check_type_conflicts(doc)
+        issues.extend(type_conflict_issues)
+        
+        return issues
+    
+    def _build_character_memory(self, doc) -> None:
+        """Build memory dictionary of characters in the document."""
+        for ent in doc.ents:
+            if ent.label_ in ["PERSON", "ORG", "GPE"]:
+                base_name = ent.text.lower()
+                
+                if base_name not in self.character_memory:
+                    self.character_memory[base_name] = {
+                        "canonical_name": ent.text,
+                        "type": ent.label_,
+                        "mentions": [],
+                        "variations": set(),
+                        "first_mention_sentence": None
+                    }
+                
+                self.character_memory[base_name]["mentions"].append({
+                    "text": ent.text,
+                    "start": ent.start_char,
+                    "end": ent.end_char
+                })
+                
+                # Track first mention
+                for sent_idx, sent in enumerate(doc.sents):
+                    if ent.start >= sent.start and ent.end <= sent.end:
+                        if self.character_memory[base_name]["first_mention_sentence"] is None:
+                            self.character_memory[base_name]["first_mention_sentence"] = sent_idx
+                        break
+    
+    def _check_name_variations(self, doc) -> List[Dict[str, str]]:
+        """Detect character name variations that may cause confusion."""
+        issues = []
+        person_names = []
+        
+        # Collect all person entities
+        for ent in doc.ents:
+            if ent.label_ == "PERSON":
+                person_names.append(ent.text)
+        
+        # Find potential variations
+        name_groups = defaultdict(set)
+        
+        for name in person_names:
+            parts = name.split()
+            for other_name in person_names:
+                if name != other_name:
+                    other_parts = other_name.split()
+                    
+                    # Check if one name is part of another
+                    if any(p.lower() == other_name.lower() for p in parts):
+                        name_groups[tuple(sorted([name, other_name]))].add(name)
+                        name_groups[tuple(sorted([name, other_name]))].add(other_name)
+                    
+                    # Check for shared surnames
+                    if len(parts) > 1 and len(other_parts) > 1:
+                        if parts[-1].lower() == other_parts[-1].lower():
+                            name_groups[tuple(sorted([name, other_name]))].add(name)
+                            name_groups[tuple(sorted([name, other_name]))].add(other_name)
+        
+        # Create issues for variations
+        processed = set()
+        for key, names in name_groups.items():
+            if len(names) >= 2 and key not in processed:
+                names_list = list(names)
+                issues.append({
+                    "issue": "Possible character inconsistency",
+                    "original_text": ", ".join(names_list),
+                    "suggestion": f"Consider using '{names_list[0]}' consistently throughout the text",
+                    "explanation": f"Character name appears with multiple variations: {', '.join(names_list)}. This may confuse readers."
+                })
+                processed.add(key)
+        
+        return issues
+    
+    def _check_pronoun_confusion(self, doc) -> List[Dict[str, str]]:
+        """Detect potential pronoun confusion or ambiguity."""
+        issues = []
+        sentences = list(doc.sents)
+        
+        for sent_idx, sent in enumerate(sentences):
+            pronouns = [token for token in sent if token.pos_ == "PRON" and token.text.lower() in ["he", "she", "they", "it", "him", "her", "them"]]
+            nouns = [token for token in sent if token.pos_ in ["NOUN", "PROPN"]]
+            
+            # Check for ambiguous pronouns
+            if pronouns and not nouns:
+                # Check previous sentence for referents
+                prev_nouns = []
+                if sent_idx > 0:
+                    prev_nouns = [token for token in sentences[sent_idx - 1] if token.pos_ in ["NOUN", "PROPN"]]
+                
+                if not prev_nouns:
+                    pronoun_text = ", ".join([p.text for p in pronouns])
+                    issues.append({
+                        "issue": "Pronoun confusion",
+                        "original_text": sent.text.strip(),
+                        "suggestion": "Add a clear noun or name before using pronouns to clarify who is being referenced",
+                        "explanation": f"The pronoun(s) '{pronoun_text}' appear without a clear referent in the immediate context."
+                    })
+            
+            # Check for multiple people with same pronouns
+            if sent_idx > 0:
+                prev_persons = [ent for ent in sentences[sent_idx - 1].ents if ent.label_ == "PERSON"]
+                curr_pronouns = [p for p in pronouns if p.text.lower() in ["he", "she", "him", "her"]]
+                
+                if len(prev_persons) > 1 and curr_pronouns:
+                    issues.append({
+                        "issue": "Ambiguous pronoun reference",
+                        "original_text": sent.text.strip(),
+                        "suggestion": f"Specify which person you mean instead of using '{curr_pronouns[0].text}'",
+                        "explanation": f"Multiple people ({', '.join([p.text for p in prev_persons])}) were mentioned, making it unclear who the pronoun refers to."
+                    })
+        
+        return issues
+    
+    def _check_abrupt_introductions(self, doc) -> List[Dict[str, str]]:
+        """Detect entities introduced without proper context."""
+        issues = []
+        sentences = list(doc.sents)
+        
+        # Introduction patterns
+        intro_patterns = [
+            r'\b(named|called|known as|introduced|meet)\b',
+            r'\b(this is|here is|there is)\b',
+            r'\b(a|an|the)\s+(?:man|woman|person|character|protagonist)\b',
+        ]
+        
+        # Track first mentions
+        first_mentions = {}
+        
+        for sent_idx, sent in enumerate(sentences):
+            for ent in sent.ents:
+                if ent.label_ in ["PERSON", "ORG"] and ent.text.lower() not in first_mentions:
+                    first_mentions[ent.text.lower()] = {
+                        "text": ent.text,
+                        "sentence_index": sent_idx,
+                        "sentence": sent.text.strip(),
+                        "label": ent.label_
+                    }
+        
+        for entity_key, mention in first_mentions.items():
+            sentence = mention["sentence"]
+            
+            # Check for introduction context
+            has_intro = any(re.search(p, sentence, re.IGNORECASE) for p in intro_patterns)
+            
+            # Check for titles indicating known entity
+            has_title = any(t in mention["text"] for t in ["Mr.", "Mrs.", "Ms.", "Dr.", "Prof.", "President", "CEO", "Sir", "Lord"])
+            
+            # First sentence with no context is potentially abrupt
+            if mention["sentence_index"] == 0 and not has_intro and not has_title:
+                if mention["label"] == "ORG" or (mention["label"] == "PERSON" and len(mention["text"].split()) == 1):
+                    issues.append({
+                        "issue": "Sudden entity introduction",
+                        "original_text": sentence,
+                        "suggestion": f"Consider introducing '{mention['text']}' with more context, e.g., 'A character named {mention['text']}...'",
+                        "explanation": f"The entity '{mention['text']}' ({mention['label']}) appears without introduction, which may confuse readers unfamiliar with the story."
+                    })
+        
+        return issues
+    
+    def _check_type_conflicts(self, doc) -> List[Dict[str, str]]:
+        """Detect when same text is categorized as different entity types."""
+        issues = []
+        entity_types = defaultdict(set)
+        
+        for ent in doc.ents:
+            entity_types[ent.text.lower()].add(ent.label_)
+        
+        for entity_text, labels in entity_types.items():
+            if len(labels) > 1:
+                issues.append({
+                    "issue": "Entity type conflict",
+                    "original_text": entity_text,
+                    "suggestion": f"Ensure '{entity_text}' is used consistently as one type throughout",
+                    "explanation": f"The term '{entity_text}' is identified as multiple types ({', '.join(labels)}), which may indicate inconsistent usage."
+                })
+        
+        return issues
+    
+    def get_character_memory(self) -> Dict[str, Any]:
+        """Return the current character memory dictionary."""
+        return self.character_memory
+    
+    def get_analysis_summary(self, text: str) -> Dict[str, Any]:
+        """
+        Get comprehensive analysis with summary statistics.
+        
+        Args:
+            text: Input text to analyze
+            
+        Returns:
+            Dictionary with issues and summary stats
+        """
+        issues = self.analyze_consistency(text)
+        
+        # Categorize issues
+        issue_categories = defaultdict(int)
+        for issue in issues:
+            issue_categories[issue["issue"]] += 1
+        
+        return {
+            "issues": issues,
+            "total_issues": len(issues),
+            "issue_breakdown": dict(issue_categories),
+            "characters_tracked": len(self.character_memory),
+            "consistency_score": max(0, 100 - (len(issues) * 10))
+        }

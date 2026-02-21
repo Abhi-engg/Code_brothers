@@ -26,20 +26,23 @@ from models import (
 )
 
 # Import the NLP engine
-from nlp_engine import WritingAssistant, analyze_text
+from nlp_engine import WritingAssistant, analyze_text, NarrativeConsistencyAnalyzer
 
-# Global assistant instance (loaded once)
+# Global instances (loaded once)
 assistant: Optional[WritingAssistant] = None
+consistency_analyzer: Optional[NarrativeConsistencyAnalyzer] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown"""
-    global assistant
+    global assistant, consistency_analyzer
     print("🚀 Starting Writing Assistant API...")
     print("📚 Loading spaCy model...")
     assistant = WritingAssistant()
+    consistency_analyzer = NarrativeConsistencyAnalyzer()
     print("✅ NLP Engine ready!")
+    print("✅ Narrative Consistency Analyzer ready!")
     yield
     print("👋 Shutting down Writing Assistant API...")
 
@@ -258,6 +261,54 @@ async def quick_analyze(
         raise HTTPException(
             status_code=500,
             detail=f"Quick analysis failed: {str(e)}"
+        )
+
+
+@app.post("/analyze/consistency", tags=["Analysis"])
+async def analyze_consistency_endpoint(request: AnalysisRequest):
+    """
+    Analyze text for narrative consistency issues.
+    
+    Detects:
+    - Same character referenced with different names
+    - Pronoun confusion
+    - Sudden new entities without introduction
+    - Entity type conflicts
+    
+    Returns a list of issues with suggestions and explanations.
+    """
+    global consistency_analyzer
+    
+    if consistency_analyzer is None:
+        consistency_analyzer = NarrativeConsistencyAnalyzer()
+    
+    try:
+        # Run narrative consistency analysis
+        issues = consistency_analyzer.analyze_consistency(request.text)
+        summary = consistency_analyzer.get_analysis_summary(request.text)
+        character_memory = consistency_analyzer.get_character_memory()
+        
+        return {
+            "success": True,
+            "issues": issues,
+            "total_issues": summary["total_issues"],
+            "issue_breakdown": summary["issue_breakdown"],
+            "characters_tracked": summary["characters_tracked"],
+            "consistency_score": summary["consistency_score"],
+            "character_memory": {
+                name: {
+                    "canonical_name": data["canonical_name"],
+                    "type": data["type"],
+                    "mention_count": len(data["mentions"])
+                }
+                for name, data in character_memory.items()
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Consistency analysis failed: {str(e)}"
         )
 
 

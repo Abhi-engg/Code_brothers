@@ -413,16 +413,33 @@ function renderIssues() {
                     <span class="w-6 h-6 bg-purple-100 rounded-full flex items-center justify-center mr-2">
                         <span class="text-purple-600 text-sm font-bold">${consistencyIssues.length}</span>
                     </span>
-                    Consistency Issues
+                    Narrative Consistency Issues
                 </h3>
                 <div class="space-y-3">
                     ${consistencyIssues.map(issue => `
                         <div class="border-l-4 border-purple-400 bg-purple-50 p-4 rounded-r-lg">
                             <div class="flex items-center justify-between mb-2">
-                                <span class="text-sm font-medium text-purple-800 capitalize">${issue.type.replace(/_/g, ' ')}</span>
-                                <span class="text-xs px-2 py-1 severity-${issue.severity} rounded-full">${issue.severity}</span>
+                                <span class="text-sm font-medium text-purple-800">${issue.issue || issue.type?.replace(/_/g, ' ') || 'Consistency Issue'}</span>
+                                ${issue.severity ? `<span class="text-xs px-2 py-1 severity-${issue.severity} rounded-full">${issue.severity}</span>` : ''}
                             </div>
-                            <p class="text-sm text-gray-700">${issue.message}</p>
+                            ${issue.original_text ? `
+                                <div class="bg-white bg-opacity-50 rounded p-2 mb-2">
+                                    <span class="text-xs text-purple-600 font-medium">Original:</span>
+                                    <p class="text-sm text-gray-800">"${truncateText(issue.original_text, 150)}"</p>
+                                </div>
+                            ` : ''}
+                            ${issue.suggestion ? `
+                                <div class="mb-2">
+                                    <span class="text-xs text-green-600 font-medium">Suggestion:</span>
+                                    <p class="text-sm text-gray-700">${issue.suggestion}</p>
+                                </div>
+                            ` : ''}
+                            ${issue.explanation ? `
+                                <div class="border-t border-purple-200 pt-2 mt-2">
+                                    <span class="text-xs text-gray-500 font-medium">Why:</span>
+                                    <p class="text-sm text-gray-600">${issue.explanation}</p>
+                                </div>
+                            ` : issue.message ? `<p class="text-sm text-gray-700">${issue.message}</p>` : ''}
                         </div>
                     `).join('')}
                 </div>

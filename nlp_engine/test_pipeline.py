@@ -34,13 +34,13 @@ class WritingAssistant:
         
         Args:
             config: Optional configuration dictionary with settings:
-                - long_sentence_threshold: int (default: 100)
+                - long_sentence_threshold: int (default: 25)
                 - repeated_word_min_count: int (default: 3)
                 - target_style: str (default: 'formal')
                 - enable_parallel: bool (default: True)
         """
         self.config = config or {}
-        self.long_sentence_threshold = self.config.get("long_sentence_threshold", 100)
+        self.long_sentence_threshold = self.config.get("long_sentence_threshold", 25)
         self.repeated_word_min_count = self.config.get("repeated_word_min_count", 3)
         self.target_style = self.config.get("target_style", "formal")
         self.enable_parallel = self.config.get("enable_parallel", True)
@@ -174,7 +174,8 @@ class WritingAssistant:
             
             if features["consistency"]:
                 futures["consistency"] = executor.submit(
-                    consistency_checker.analyze_narrative_consistency,
+                    self._analyze_consistency_combined,
+                    text,
                     doc,
                     analysis.get("entities", [])
                 )
@@ -235,7 +236,8 @@ class WritingAssistant:
             results["style_analysis"] = style_transformer.analyze_current_style(text)
         
         if features["consistency"]:
-            results["consistency"] = consistency_checker.analyze_narrative_consistency(
+            results["consistency"] = self._analyze_consistency_combined(
+                text,
                 doc,
                 analysis.get("entities", [])
             )
@@ -254,6 +256,28 @@ class WritingAssistant:
             )
         
         return results
+    
+    def _analyze_consistency_combined(self, text: str, doc, entities: List) -> Dict[str, Any]:
+        """
+        Combined consistency analysis using both methods.
+        
+        Returns results in the new format with issue, original_text, suggestion, explanation.
+        """
+        # Get traditional analysis
+        base_analysis = consistency_checker.analyze_narrative_consistency(doc, entities)
+        
+        # Create NarrativeConsistencyAnalyzer for enhanced analysis
+        analyzer = consistency_checker.NarrativeConsistencyAnalyzer()
+        enhanced_issues = analyzer.analyze_consistency(text)
+        
+        # Merge results - use enhanced issues format for all_issues
+        base_analysis["all_issues"] = enhanced_issues
+        base_analysis["narrative_issues"] = enhanced_issues
+        
+        # Update total count
+        base_analysis["total_issue_count"] = len(enhanced_issues)
+        
+        return base_analysis
     
     def _calculate_scores(self, results: Dict[str, Any]) -> Dict[str, Any]:
         """Calculate aggregate scores from analysis results."""

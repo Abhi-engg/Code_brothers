@@ -21,6 +21,7 @@ Usage:
 """
 
 from .test_pipeline import WritingAssistant, analyze_text
+from .consistency_checker import NarrativeConsistencyAnalyzer
 
 # Module-level exports for direct access
 from . import text_analyzer
@@ -32,6 +33,7 @@ from . import explanation
 __all__ = [
     "WritingAssistant",
     "analyze_text",
+    "NarrativeConsistencyAnalyzer",
     "text_analyzer",
     "enhancer",
     "style_transformer",
