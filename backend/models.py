@@ -41,6 +41,7 @@ class FeatureToggles(BaseModel):
     transform: bool = Field(default=False, description="Enable style transformation")
     explanations: bool = Field(default=True, description="Generate explanations")
     mind_map: bool = Field(default=True, description="Generate concept mind map")
+    antipatterns: bool = Field(default=True, description="Detect writing anti-patterns")
 
 
 class AnalysisRequest(BaseModel):
@@ -154,6 +155,8 @@ class AnalysisResponse(BaseModel):
     annotations: Optional[List[Dict[str, Any]]] = None
     # Mind map (Phase 7)
     mind_map: Optional[Dict[str, Any]] = None
+    # Anti-patterns (Phase 8)
+    antipatterns: Optional[Dict[str, Any]] = None
     
     class Config:
         json_schema_extra = {

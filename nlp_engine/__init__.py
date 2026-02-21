@@ -31,6 +31,7 @@ from . import consistency_checker
 from . import explanation
 from . import grammar_checker
 from . import concept_extractor
+from . import antipatterns
 
 __all__ = [
     "WritingAssistant",
@@ -42,7 +43,8 @@ __all__ = [
     "consistency_checker",
     "explanation",
     "grammar_checker",
-    "concept_extractor"
+    "concept_extractor",
+    "antipatterns"
 ]
 
 __version__ = "1.0.0"

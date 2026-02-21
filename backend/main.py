@@ -193,6 +193,8 @@ async def analyze_endpoint(request: AnalysisRequest):
             annotations=results.get("annotations"),
             # Mind map (Phase 7)
             mind_map=results.get("mind_map"),
+            # Anti-patterns (Phase 8)
+            antipatterns=results.get("antipatterns"),
         )
         
     except Exception as e:

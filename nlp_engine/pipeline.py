@@ -15,6 +15,7 @@ from . import consistency_checker
 from . import explanation
 from . import grammar_checker
 from . import concept_extractor
+from . import antipatterns
 
 
 class WritingAssistant:
@@ -78,7 +79,8 @@ class WritingAssistant:
             "grammar": True,
             "transform": False,
             "explanations": True,
-            "mind_map": True
+            "mind_map": True,
+            "antipatterns": True
         }
         features = {**default_features, **(features or {})}
         
@@ -205,6 +207,13 @@ class WritingAssistant:
                 results["mind_map"] = concept_extractor.generate_mind_map_data(doc, text)
             except Exception as e:
                 results["mind_map"] = {"error": str(e), "nodes": [], "edges": []}
+        
+        # Anti-patterns (Phase 8)
+        if features.get("antipatterns", True):
+            try:
+                results["antipatterns"] = antipatterns.detect_all_antipatterns(doc, text)
+            except Exception as e:
+                results["antipatterns"] = {"error": str(e), "categories": {}, "summary": {"total": 0, "critical": 0, "moderate": 0, "minor": 0}}
         
         return results
     

@@ -40,7 +40,8 @@ const featureToggles = {
     style: document.getElementById('feat-style'),
     consistency: document.getElementById('feat-consistency'),
     transform: document.getElementById('feat-transform'),
-    mindmap: document.getElementById('feat-mindmap')
+    mindmap: document.getElementById('feat-mindmap'),
+    antipatterns: document.getElementById('feat-antipatterns')
 };
 
 // Initialize
@@ -146,7 +147,8 @@ async function analyzeText() {
         consistency: featureToggles.consistency.checked,
         transform: featureToggles.transform.checked,
         explanations: true,
-        mind_map: featureToggles.mindmap ? featureToggles.mindmap.checked : true
+        mind_map: featureToggles.mindmap ? featureToggles.mindmap.checked : true,
+        antipatterns: featureToggles.antipatterns ? featureToggles.antipatterns.checked : true
     };
     
     const requestBody = {
@@ -328,6 +330,9 @@ function renderTab(tabName) {
         case 'mindmap':
             content = renderMindMap();
             break;
+        case 'antipatterns':
+            content = renderAntiPatterns();
+            break;
         case 'details':
             content = renderDetails();
             break;
@@ -349,6 +354,10 @@ function renderTab(tabName) {
     // Post-render: initialize vis.js mind map
     if (tabName === 'mindmap') {
         setTimeout(() => initMindMapNetwork(), 50);
+    }
+    // Post-render: bind anti-pattern expand/collapse
+    if (tabName === 'antipatterns') {
+        setTimeout(() => bindAntiPatternEvents(), 50);
     }
 }
 
@@ -560,6 +569,181 @@ function bindWriteTabEvents() {
             bindWriteTabEvents();
         });
     });
+}
+
+// ════════════════════════════════════════════════════
+// Render Anti-Patterns Tab — "What NOT to Do" (Phase 8)
+// ════════════════════════════════════════════════════
+
+const AP_CATEGORY_META = {
+    adverb_overuse:      { label: 'Adverb Overuse',      icon: '📝', color: '#F59E0B' },
+    show_dont_tell:      { label: 'Show Don\'t Tell',     icon: '🎭', color: '#EC4899' },
+    nominalizations:     { label: 'Nominalizations',      icon: '📦', color: '#8B5CF6' },
+    hedge_words:         { label: 'Hedge Words',          icon: '🌫️', color: '#6366F1' },
+    redundant_modifiers: { label: 'Redundant Modifiers',  icon: '♻️',  color: '#EF4444' },
+    weak_openings:       { label: 'Weak Openings',        icon: '🚪', color: '#F97316' },
+    filter_words:        { label: 'Filter Words',         icon: '🔍', color: '#14B8A6' },
+    info_dumps:          { label: 'Info Dumps',            icon: '📚', color: '#64748B' },
+};
+
+const _SEV_COLORS = {
+    critical: { bg: '#FEE2E2', border: '#EF4444', text: '#991B1B', badge: '#EF4444' },
+    moderate: { bg: '#FEF3C7', border: '#F59E0B', text: '#92400E', badge: '#F59E0B' },
+    minor:    { bg: '#F0FDF4', border: '#22C55E', text: '#166534', badge: '#22C55E' },
+};
+
+function renderAntiPatterns() {
+    const ap = analysisResults.antipatterns;
+
+    if (!ap || ap.error || !ap.categories) {
+        return `
+            <div class="text-center py-12 text-gray-400 animate-fade-in">
+                <div class="text-5xl mb-4">🚫</div>
+                <p class="text-lg font-medium mb-2">No Anti-Pattern Data</p>
+                <p class="text-sm">Submit text to detect writing anti-patterns.</p>
+                ${ap?.error ? `<p class="text-xs text-red-400 mt-4">Error: ${_esc(ap.error)}</p>` : ''}
+            </div>`;
+    }
+
+    const { categories, summary } = ap;
+
+    // Summary bar
+    const summaryHtml = `
+        <div class="ap-summary-bar">
+            <span class="ap-summary-label">Anti-Patterns Found:</span>
+            ${summary.critical > 0 ? `<span class="ap-sev-chip ap-sev-critical">${summary.critical} critical</span>` : ''}
+            ${summary.moderate > 0 ? `<span class="ap-sev-chip ap-sev-moderate">${summary.moderate} moderate</span>` : ''}
+            ${summary.minor > 0 ? `<span class="ap-sev-chip ap-sev-minor">${summary.minor} minor</span>` : ''}
+            ${summary.total === 0 ? '<span class="text-green-600 font-semibold">✅ No anti-patterns detected!</span>' : ''}
+            <span class="ap-summary-total">${summary.total} total</span>
+        </div>`;
+
+    // Category cards
+    let cardsHtml = '';
+    for (const [catKey, catData] of Object.entries(categories)) {
+        const meta = AP_CATEGORY_META[catKey] || { label: catKey, icon: '📌', color: '#94A3B8' };
+        const count = catData.count || 0;
+        const expanded = count > 0;
+
+        // Instance list
+        let instancesHtml = '';
+        if (count > 0) {
+            instancesHtml = '<div class="ap-instances">';
+            for (const inst of catData.instances) {
+                const sev = _SEV_COLORS[inst.severity] || _SEV_COLORS.minor;
+                instancesHtml += `
+                    <div class="ap-instance" style="border-left-color:${sev.badge}">
+                        <div class="ap-inst-header">
+                            <span class="ap-sev-dot" style="background:${sev.badge}"></span>
+                            <span class="ap-inst-text">${_esc(inst.text)}</span>
+                            <span class="ap-inst-sev" style="color:${sev.badge}">${inst.severity}</span>
+                        </div>
+                        <p class="ap-inst-location">${_esc(inst.location)}</p>
+                        <p class="ap-inst-suggestion">💡 ${_esc(inst.suggestion)}</p>
+                        ${inst.before_after_example ? `
+                            <div class="ap-before-after">
+                                <div class="ap-ba-bad">
+                                    <span class="ap-ba-label">✗ Before</span>
+                                    <span class="ap-ba-text">${_esc(inst.before_after_example.before)}</span>
+                                </div>
+                                <span class="ap-ba-arrow">→</span>
+                                <div class="ap-ba-good">
+                                    <span class="ap-ba-label">✓ After</span>
+                                    <span class="ap-ba-text">${_esc(inst.before_after_example.after)}</span>
+                                </div>
+                            </div>` : ''}
+                    </div>`;
+            }
+            instancesHtml += '</div>';
+        }
+
+        cardsHtml += `
+            <div class="ap-card ${count === 0 ? 'ap-card-clean' : ''}">
+                <div class="ap-card-header" data-ap-toggle="${catKey}">
+                    <div class="ap-card-title">
+                        <span class="ap-card-icon" style="color:${meta.color}">${meta.icon}</span>
+                        <span class="ap-card-name">${meta.label}</span>
+                        <span class="ap-card-count" style="background:${count > 0 ? meta.color : '#CBD5E1'}">${count}</span>
+                    </div>
+                    <div class="ap-card-right">
+                        ${catData.educational_tip ? `<span class="ap-learn-more" title="${_esc(catData.educational_tip)}">📖 Learn</span>` : ''}
+                        <span class="ap-card-chevron ${expanded && count > 0 ? 'ap-open' : ''}">${count > 0 ? '▾' : '—'}</span>
+                    </div>
+                </div>
+                ${catData.educational_tip && count > 0 ? `<div class="ap-tip">${_esc(catData.educational_tip)}</div>` : ''}
+                <div class="ap-card-body ${count > 0 ? 'ap-expanded' : 'ap-collapsed'}" id="ap-body-${catKey}">
+                    ${instancesHtml}
+                </div>
+            </div>`;
+    }
+
+    return `
+        <div class="ap-container animate-fade-in">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="font-semibold text-gray-900 text-lg flex items-center">
+                    <span class="text-2xl mr-2">🚫</span> Writing Anti-Patterns
+                </h3>
+                <div class="flex gap-2">
+                    <button id="ap-expand-all" class="ap-toolbar-btn">▸ Expand All</button>
+                    <button id="ap-collapse-all" class="ap-toolbar-btn">▾ Collapse All</button>
+                </div>
+            </div>
+            ${summaryHtml}
+            <div class="ap-cards">
+                ${cardsHtml}
+            </div>
+        </div>`;
+}
+
+// Post-render binding for anti-patterns
+function bindAntiPatternEvents() {
+    // Expand/collapse individual cards
+    document.querySelectorAll('[data-ap-toggle]').forEach(header => {
+        header.addEventListener('click', () => {
+            const catKey = header.dataset.apToggle;
+            const body = document.getElementById('ap-body-' + catKey);
+            const chevron = header.querySelector('.ap-card-chevron');
+            if (!body) return;
+            const isExpanded = body.classList.contains('ap-expanded');
+            if (isExpanded) {
+                body.classList.remove('ap-expanded');
+                body.classList.add('ap-collapsed');
+                if (chevron) { chevron.classList.remove('ap-open'); chevron.textContent = '▸'; }
+            } else {
+                body.classList.remove('ap-collapsed');
+                body.classList.add('ap-expanded');
+                if (chevron) { chevron.classList.add('ap-open'); chevron.textContent = '▾'; }
+            }
+        });
+    });
+
+    // Expand All / Collapse All
+    const expandBtn = document.getElementById('ap-expand-all');
+    const collapseBtn = document.getElementById('ap-collapse-all');
+    if (expandBtn) {
+        expandBtn.addEventListener('click', () => {
+            document.querySelectorAll('.ap-card-body').forEach(b => {
+                b.classList.remove('ap-collapsed');
+                b.classList.add('ap-expanded');
+            });
+            document.querySelectorAll('.ap-card-chevron').forEach(c => {
+                c.classList.add('ap-open');
+                c.textContent = '▾';
+            });
+        });
+    }
+    if (collapseBtn) {
+        collapseBtn.addEventListener('click', () => {
+            document.querySelectorAll('.ap-card-body').forEach(b => {
+                b.classList.remove('ap-expanded');
+                b.classList.add('ap-collapsed');
+            });
+            document.querySelectorAll('.ap-card-chevron').forEach(c => {
+                c.classList.remove('ap-open');
+                c.textContent = '▸';
+            });
+        });
+    }
 }
 
 // ════════════════════════════════════════════════════
