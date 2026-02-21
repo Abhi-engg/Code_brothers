@@ -13,6 +13,7 @@ from . import enhancer
 from . import style_transformer
 from . import consistency_checker
 from . import explanation
+from . import grammar_checker
 
 
 class WritingAssistant:
@@ -73,6 +74,7 @@ class WritingAssistant:
             "flow": True,
             "style": True,
             "consistency": True,
+            "grammar": True,
             "transform": False,
             "explanations": True
         }
@@ -141,6 +143,17 @@ class WritingAssistant:
             # Still need doc for other analyses
             doc = self.nlp(text)
             analysis = {"sentences": [], "tokens": [], "entities": []}
+        
+        # Grammar analysis (needs doc)
+        if features.get("grammar", True):
+            try:
+                results["grammar_analysis"] = grammar_checker.check_grammar(doc, text)
+                # Add grammar issues to the issues dict
+                grammar_issues = results["grammar_analysis"].get("all_issues", [])
+                if grammar_issues:
+                    results["issues"]["grammar"] = grammar_issues
+            except Exception as e:
+                results["grammar_analysis"] = {"error": str(e), "total_issues": 0, "grammar_score": 100}
         
         # Parallel processing of independent analyses
         if self.enable_parallel:

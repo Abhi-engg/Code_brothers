@@ -171,6 +171,8 @@ async def analyze_endpoint(request: AnalysisRequest):
             suggestions=results.get("suggestions"),
             explanations=results.get("explanations"),
             scores=results.get("scores"),
+            # Grammar analysis
+            grammar_analysis=results.get("grammar_analysis"),
             # New enhanced features
             passive_voice=results.get("passive_voice"),
             sentiment=results.get("sentiment"),

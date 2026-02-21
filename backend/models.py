@@ -21,6 +21,7 @@ class FeatureToggles(BaseModel):
     flow: bool = Field(default=True, description="Enable flow analysis")
     style: bool = Field(default=True, description="Enable style analysis")
     consistency: bool = Field(default=True, description="Enable consistency checking")
+    grammar: bool = Field(default=True, description="Enable grammar checking")
     transform: bool = Field(default=False, description="Enable style transformation")
     explanations: bool = Field(default=True, description="Generate explanations")
 
@@ -114,6 +115,8 @@ class AnalysisResponse(BaseModel):
     suggestions: Optional[List[Dict[str, Any]]] = None
     explanations: Optional[Dict[str, Any]] = None
     scores: Optional[AnalysisScores] = None
+    # Grammar analysis
+    grammar_analysis: Optional[Dict[str, Any]] = None
     # New enhanced features
     passive_voice: Optional[Dict[str, Any]] = None
     sentiment: Optional[Dict[str, Any]] = None
