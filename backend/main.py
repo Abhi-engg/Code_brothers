@@ -191,6 +191,8 @@ async def analyze_endpoint(request: AnalysisRequest):
             narrative_tracker=results.get("narrative_tracker"),
             # Inline annotations (Phase 6)
             annotations=results.get("annotations"),
+            # Mind map (Phase 7)
+            mind_map=results.get("mind_map"),
         )
         
     except Exception as e:

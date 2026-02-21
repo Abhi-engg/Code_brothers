@@ -39,7 +39,8 @@ const featureToggles = {
     flow: document.getElementById('feat-flow'),
     style: document.getElementById('feat-style'),
     consistency: document.getElementById('feat-consistency'),
-    transform: document.getElementById('feat-transform')
+    transform: document.getElementById('feat-transform'),
+    mindmap: document.getElementById('feat-mindmap')
 };
 
 // Initialize
@@ -144,7 +145,8 @@ async function analyzeText() {
         style: featureToggles.style.checked,
         consistency: featureToggles.consistency.checked,
         transform: featureToggles.transform.checked,
-        explanations: true
+        explanations: true,
+        mind_map: featureToggles.mindmap ? featureToggles.mindmap.checked : true
     };
     
     const requestBody = {
@@ -323,6 +325,9 @@ function renderTab(tabName) {
         case 'narrative':
             content = renderNarrative();
             break;
+        case 'mindmap':
+            content = renderMindMap();
+            break;
         case 'details':
             content = renderDetails();
             break;
@@ -340,6 +345,10 @@ function renderTab(tabName) {
     // Post-render binding for Write tab
     if (tabName === 'write') {
         bindWriteTabEvents();
+    }
+    // Post-render: initialize vis.js mind map
+    if (tabName === 'mindmap') {
+        setTimeout(() => initMindMapNetwork(), 50);
     }
 }
 
@@ -550,6 +559,286 @@ function bindWriteTabEvents() {
             elements.tabContent.innerHTML = writeHTML;
             bindWriteTabEvents();
         });
+    });
+}
+
+// ════════════════════════════════════════════════════
+// Render Mind Map Tab — NoteLM-style (Phase 7)
+// ════════════════════════════════════════════════════
+
+const MIND_MAP_GROUP_META = {
+    character:    { label: 'Characters',     icon: '👤', color: '#3B82F6' },
+    organization: { label: 'Organizations',  icon: '🏢', color: '#6366F1' },
+    location:     { label: 'Locations',       icon: '📍', color: '#10B981' },
+    time:         { label: 'Time',            icon: '🕐', color: '#F59E0B' },
+    event:        { label: 'Events',          icon: '⚡', color: '#EC4899' },
+    theme:        { label: 'Themes',          icon: '💡', color: '#F59E0B' },
+    action:       { label: 'Actions',         icon: '🎯', color: '#EF4444' },
+    detail:       { label: 'Details',         icon: '📎', color: '#94A3B8' },
+    concept:      { label: 'Concepts',        icon: '🔮', color: '#8B5CF6' },
+    other:        { label: 'Other',           icon: '📌', color: '#CBD5E1' },
+};
+
+// Track which mind map groups are visible
+let mindMapVisibleGroups = new Set(Object.keys(MIND_MAP_GROUP_META));
+let mindMapNetworkInstance = null;
+
+function renderMindMap() {
+    const mapData = analysisResults.mind_map;
+
+    if (!mapData || mapData.error || !mapData.nodes || mapData.nodes.length === 0) {
+        return `
+            <div class="text-center py-12 text-gray-400 animate-fade-in">
+                <div class="text-5xl mb-4">🧠</div>
+                <p class="text-lg font-medium mb-2">No Mind Map Data</p>
+                <p class="text-sm">The text doesn't contain enough concepts to generate a mind map.<br>
+                Try analyzing longer text with named entities, characters, and themes.</p>
+                ${mapData?.error ? `<p class="text-xs text-red-400 mt-4">Error: ${_esc(mapData.error)}</p>` : ''}
+            </div>`;
+    }
+
+    const { nodes, edges, central_node, stats } = mapData;
+
+    // Group counts for legend
+    const groupCounts = {};
+    for (const n of nodes) {
+        groupCounts[n.group] = (groupCounts[n.group] || 0) + 1;
+    }
+
+    // Legend / filter bar
+    let legendHtml = '<div class="mm-legend">';
+    for (const [grp, meta] of Object.entries(MIND_MAP_GROUP_META)) {
+        const c = groupCounts[grp] || 0;
+        if (c === 0) continue;
+        const active = mindMapVisibleGroups.has(grp);
+        legendHtml += `
+            <button class="mm-legend-btn ${active ? 'active' : 'inactive'}"
+                    data-group="${grp}"
+                    style="--grp-color: ${meta.color}">
+                <span class="mm-legend-dot" style="background:${meta.color}"></span>
+                <span>${meta.icon} ${meta.label}</span>
+                <span class="mm-legend-count">${c}</span>
+            </button>`;
+    }
+    legendHtml += '</div>';
+
+    // Stats bar
+    const statsHtml = `
+        <div class="mm-stats">
+            <span>🧠 <strong>${stats.total_nodes}</strong> concept${stats.total_nodes !== 1 ? 's' : ''}</span>
+            <span class="mm-stats-sep">·</span>
+            <span>🔗 <strong>${stats.total_edges}</strong> connection${stats.total_edges !== 1 ? 's' : ''}</span>
+            <span class="mm-stats-sep">·</span>
+            <span>⭐ Central: <strong>${_esc(central_node || '—')}</strong></span>
+        </div>`;
+
+    // Concept list sidebar
+    let conceptListHtml = '<div class="mm-concept-list">';
+    conceptListHtml += '<h4 class="mm-concept-list-title">Key Concepts</h4>';
+    const sortedNodes = [...nodes].sort((a, b) => b.importance - a.importance);
+    for (const n of sortedNodes) {
+        const meta = MIND_MAP_GROUP_META[n.group] || MIND_MAP_GROUP_META.other;
+        const barWidth = Math.max(4, n.importance);
+        conceptListHtml += `
+            <div class="mm-concept-item" data-node-id="${n.id}" title="${_esc(n.label)} (${n.type})">
+                <div class="mm-concept-icon" style="color:${meta.color}">${meta.icon}</div>
+                <div class="mm-concept-info">
+                    <div class="mm-concept-name">${_esc(n.label)}</div>
+                    <div class="mm-concept-bar-track">
+                        <div class="mm-concept-bar" style="width:${barWidth}%; background:${meta.color}"></div>
+                    </div>
+                </div>
+                <div class="mm-concept-score">${n.importance}</div>
+            </div>`;
+    }
+    conceptListHtml += '</div>';
+
+    return `
+        <div class="mm-container animate-fade-in">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="font-semibold text-gray-900 text-lg flex items-center">
+                    <span class="text-2xl mr-2">🧠</span> Concept Mind Map
+                </h3>
+                <div class="flex gap-2">
+                    <button id="mm-btn-fit" class="mm-toolbar-btn" title="Fit to view">⊞ Fit</button>
+                    <button id="mm-btn-physics" class="mm-toolbar-btn" title="Toggle physics">⚛️ Physics</button>
+                </div>
+            </div>
+            ${statsHtml}
+            ${legendHtml}
+            <div class="mm-layout">
+                <div class="mm-graph-wrap">
+                    <div id="mm-network" class="mm-network"></div>
+                    <div class="mm-hint">Drag to pan · Scroll to zoom · Click node to highlight</div>
+                </div>
+                ${conceptListHtml}
+            </div>
+        </div>`;
+}
+
+/**
+ * Initialize the vis.js Network after the DOM is rendered.
+ */
+function initMindMapNetwork() {
+    const container = document.getElementById('mm-network');
+    if (!container) return;
+
+    const mapData = analysisResults.mind_map;
+    if (!mapData || !mapData.nodes || mapData.nodes.length === 0) return;
+
+    // Filter by visible groups
+    const visibleNodes = mapData.nodes.filter(n => mindMapVisibleGroups.has(n.group));
+    const visibleIds = new Set(visibleNodes.map(n => n.id));
+    const visibleEdges = mapData.edges.filter(e => visibleIds.has(e.from) && visibleIds.has(e.to));
+
+    // Build vis.js DataSets
+    const nodesData = visibleNodes.map(n => ({
+        id: n.id,
+        label: n.label,
+        size: n.size,
+        color: {
+            background: n.color.background,
+            border: n.color.border,
+            highlight: { background: n.color.background, border: '#1E293B' },
+            hover: { background: n.color.background, border: '#1E293B' },
+        },
+        font: {
+            size: n.font_size,
+            color: n.color.fontColor || '#ffffff',
+            strokeWidth: 2,
+            strokeColor: 'rgba(0,0,0,0.3)',
+            face: "'Inter', 'Segoe UI', system-ui, sans-serif",
+            bold: n.is_central ? { color: n.color.fontColor || '#ffffff', size: n.font_size + 2 } : undefined,
+        },
+        shape: n.is_central ? 'star' : 'dot',
+        borderWidth: n.is_central ? 3 : 2,
+        shadow: { enabled: true, color: 'rgba(0,0,0,0.15)', size: 8, x: 2, y: 2 },
+        title: `${n.label}\nType: ${n.type}\nImportance: ${n.importance}%`,
+    }));
+
+    const edgesData = visibleEdges.map((e, i) => ({
+        id: i,
+        from: e.from,
+        to: e.to,
+        label: e.label.length > 18 ? e.label.slice(0, 16) + '…' : e.label,
+        width: e.width,
+        color: { color: '#94A3B8', highlight: '#3B82F6', hover: '#64748B' },
+        font: { size: 9, color: '#64748B', strokeWidth: 0, align: 'middle', face: 'system-ui' },
+        arrows: { to: { enabled: false } },
+        smooth: { type: 'continuous', roundness: 0.3 },
+    }));
+
+    const options = {
+        physics: {
+            enabled: true,
+            solver: 'forceAtlas2Based',
+            forceAtlas2Based: {
+                gravitationalConstant: -40,
+                centralGravity: 0.008,
+                springLength: 140,
+                springConstant: 0.04,
+                damping: 0.4,
+                avoidOverlap: 0.6,
+            },
+            stabilization: { iterations: 200, updateInterval: 25 },
+        },
+        interaction: {
+            hover: true,
+            tooltipDelay: 200,
+            zoomView: true,
+            dragView: true,
+            dragNodes: true,
+            navigationButtons: false,
+            keyboard: false,
+        },
+        layout: {
+            improvedLayout: true,
+            randomSeed: 42,
+        },
+        nodes: {
+            shape: 'dot',
+            scaling: { min: 15, max: 55 },
+        },
+        edges: {
+            smooth: { type: 'continuous' },
+        },
+    };
+
+    // Destroy previous instance
+    if (mindMapNetworkInstance) {
+        mindMapNetworkInstance.destroy();
+        mindMapNetworkInstance = null;
+    }
+
+    const network = new vis.Network(container, { nodes: nodesData, edges: edgesData }, options);
+    mindMapNetworkInstance = network;
+
+    // Click node → highlight in concept list
+    network.on('selectNode', (params) => {
+        const nodeId = params.nodes[0];
+        // highlight concept-list item
+        document.querySelectorAll('.mm-concept-item').forEach(el => {
+            el.classList.toggle('mm-concept-active', parseInt(el.dataset.nodeId) === nodeId);
+        });
+        // highlight connected edges
+        const connectedEdges = network.getConnectedEdges(nodeId);
+        network.selectEdges(connectedEdges);
+    });
+
+    network.on('deselectNode', () => {
+        document.querySelectorAll('.mm-concept-item').forEach(el => {
+            el.classList.remove('mm-concept-active');
+        });
+    });
+
+    // Bind legend filter buttons
+    document.querySelectorAll('.mm-legend-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const grp = btn.dataset.group;
+            if (mindMapVisibleGroups.has(grp)) {
+                mindMapVisibleGroups.delete(grp);
+            } else {
+                mindMapVisibleGroups.add(grp);
+            }
+            // Re-render
+            elements.tabContent.innerHTML = renderMindMap();
+            setTimeout(() => initMindMapNetwork(), 50);
+        });
+    });
+
+    // Concept list click → focus node
+    document.querySelectorAll('.mm-concept-item').forEach(el => {
+        el.addEventListener('click', () => {
+            const nodeId = parseInt(el.dataset.nodeId);
+            network.selectNodes([nodeId]);
+            network.focus(nodeId, { scale: 1.2, animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+            document.querySelectorAll('.mm-concept-item').forEach(e => e.classList.remove('mm-concept-active'));
+            el.classList.add('mm-concept-active');
+        });
+    });
+
+    // Toolbar buttons
+    const fitBtn = document.getElementById('mm-btn-fit');
+    const physicsBtn = document.getElementById('mm-btn-physics');
+
+    if (fitBtn) {
+        fitBtn.addEventListener('click', () => {
+            network.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+        });
+    }
+
+    let physicsOn = true;
+    if (physicsBtn) {
+        physicsBtn.addEventListener('click', () => {
+            physicsOn = !physicsOn;
+            network.setOptions({ physics: { enabled: physicsOn } });
+            physicsBtn.textContent = physicsOn ? '⚛️ Physics' : '📌 Locked';
+        });
+    }
+
+    // Fit after stabilization
+    network.once('stabilizationIterationsDone', () => {
+        network.fit({ animation: { duration: 300, easingFunction: 'easeInOutQuad' } });
     });
 }
 

@@ -40,6 +40,7 @@ class FeatureToggles(BaseModel):
     grammar: bool = Field(default=True, description="Enable grammar checking")
     transform: bool = Field(default=False, description="Enable style transformation")
     explanations: bool = Field(default=True, description="Generate explanations")
+    mind_map: bool = Field(default=True, description="Generate concept mind map")
 
 
 class AnalysisRequest(BaseModel):
@@ -151,6 +152,8 @@ class AnalysisResponse(BaseModel):
     narrative_tracker: Optional[Dict[str, Any]] = None
     # Inline annotations (Phase 6)
     annotations: Optional[List[Dict[str, Any]]] = None
+    # Mind map (Phase 7)
+    mind_map: Optional[Dict[str, Any]] = None
     
     class Config:
         json_schema_extra = {

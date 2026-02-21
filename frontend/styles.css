@@ -845,3 +845,203 @@ button:active::before {
     color: #1E293B;
     font-size: 1.05rem;
 }
+
+/* ═══════════════════════════════════════════════════════
+   Phase 7 — Mind Map (vis.js Network)
+   ═══════════════════════════════════════════════════════ */
+
+/* Container */
+.mm-container {
+    padding: 0;
+}
+
+/* Stats bar */
+.mm-stats {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.82rem;
+    color: #64748B;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 10px;
+    padding: 8px 16px;
+    margin-bottom: 10px;
+}
+.mm-stats strong { color: #1E293B; }
+.mm-stats-sep { color: #CBD5E1; }
+
+/* Legend / filter bar */
+.mm-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+.mm-legend-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1.5px solid var(--grp-color, #CBD5E1);
+    background: white;
+    font-size: 0.76rem;
+    color: #334155;
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+}
+.mm-legend-btn.active {
+    background: var(--grp-color);
+    color: white;
+    border-color: var(--grp-color);
+}
+.mm-legend-btn.inactive {
+    opacity: 0.45;
+}
+.mm-legend-btn:hover {
+    transform: scale(1.04);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+.mm-legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.mm-legend-count {
+    background: rgba(0,0,0,0.08);
+    padding: 0 5px;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+.mm-legend-btn.active .mm-legend-count {
+    background: rgba(255,255,255,0.25);
+}
+
+/* Layout — graph + sidebar */
+.mm-layout {
+    display: flex;
+    gap: 14px;
+    min-height: 420px;
+}
+
+/* Graph wrapper */
+.mm-graph-wrap {
+    flex: 1;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+}
+.mm-network {
+    flex: 1;
+    min-height: 400px;
+    border: 1.5px solid #E2E8F0;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #0F172A 0%, #1E293B 50%, #0F172A 100%);
+    overflow: hidden;
+}
+.mm-hint {
+    text-align: center;
+    font-size: 0.7rem;
+    color: #94A3B8;
+    margin-top: 4px;
+}
+
+/* Toolbar buttons */
+.mm-toolbar-btn {
+    padding: 5px 12px;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    background: white;
+    font-size: 0.78rem;
+    color: #475569;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.mm-toolbar-btn:hover {
+    background: #F1F5F9;
+    border-color: #94A3B8;
+}
+
+/* Concept list sidebar */
+.mm-concept-list {
+    width: 220px;
+    flex-shrink: 0;
+    max-height: 460px;
+    overflow-y: auto;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 14px;
+    padding: 12px;
+}
+.mm-concept-list-title {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #1E293B;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #E2E8F0;
+}
+.mm-concept-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 6px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.mm-concept-item:hover,
+.mm-concept-item.mm-concept-active {
+    background: #E2E8F0;
+}
+.mm-concept-icon {
+    font-size: 0.9rem;
+    flex-shrink: 0;
+}
+.mm-concept-info {
+    flex: 1;
+    min-width: 0;
+}
+.mm-concept-name {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #1E293B;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.mm-concept-bar-track {
+    height: 3px;
+    background: #E2E8F0;
+    border-radius: 3px;
+    margin-top: 3px;
+}
+.mm-concept-bar {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.5s ease;
+}
+.mm-concept-score {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #64748B;
+    flex-shrink: 0;
+}
+
+/* Responsive — stack on small */
+@media (max-width: 768px) {
+    .mm-layout {
+        flex-direction: column;
+    }
+    .mm-concept-list {
+        width: 100%;
+        max-height: 200px;
+    }
+    .mm-network {
+        min-height: 300px;
+    }
+}

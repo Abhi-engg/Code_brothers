@@ -14,6 +14,7 @@ from . import style_transformer
 from . import consistency_checker
 from . import explanation
 from . import grammar_checker
+from . import concept_extractor
 
 
 class WritingAssistant:
@@ -76,7 +77,8 @@ class WritingAssistant:
             "consistency": True,
             "grammar": True,
             "transform": False,
-            "explanations": True
+            "explanations": True,
+            "mind_map": True
         }
         features = {**default_features, **(features or {})}
         
@@ -196,6 +198,13 @@ class WritingAssistant:
         
         # Aggregate all annotations for inline highlights
         results["annotations"] = self.aggregate_annotations(results, text)
+        
+        # Mind map (Phase 7)
+        if features.get("mind_map", True):
+            try:
+                results["mind_map"] = concept_extractor.generate_mind_map_data(doc, text)
+            except Exception as e:
+                results["mind_map"] = {"error": str(e), "nodes": [], "edges": []}
         
         return results
     

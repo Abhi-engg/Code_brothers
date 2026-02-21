@@ -30,6 +30,7 @@ from . import style_transformer
 from . import consistency_checker
 from . import explanation
 from . import grammar_checker
+from . import concept_extractor
 
 __all__ = [
     "WritingAssistant",
@@ -40,7 +41,8 @@ __all__ = [
     "style_transformer",
     "consistency_checker",
     "explanation",
-    "grammar_checker"
+    "grammar_checker",
+    "concept_extractor"
 ]
 
 __version__ = "1.0.0"
