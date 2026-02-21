@@ -12,6 +12,10 @@ class TargetStyle(str, Enum):
     FORMAL = "formal"
     CASUAL = "casual"
     ACADEMIC = "academic"
+    CREATIVE = "creative"
+    PERSUASIVE = "persuasive"
+    JOURNALISTIC = "journalistic"
+    NARRATIVE = "narrative"
 
 
 class ToneType(str, Enum):
@@ -132,6 +136,8 @@ class AnalysisResponse(BaseModel):
     grammar_analysis: Optional[Dict[str, Any]] = None
     # Tone analysis
     tone_analysis: Optional[Dict[str, Any]] = None
+    # Style scores per paragraph
+    style_scores: Optional[List[Dict[str, Any]]] = None
     # New enhanced features
     passive_voice: Optional[Dict[str, Any]] = None
     sentiment: Optional[Dict[str, Any]] = None

@@ -176,6 +176,8 @@ async def analyze_endpoint(request: AnalysisRequest):
             grammar_analysis=results.get("grammar_analysis"),
             # Tone analysis
             tone_analysis=results.get("tone_analysis"),
+            # Style scores per paragraph
+            style_scores=results.get("style_scores"),
             # New enhanced features
             passive_voice=results.get("passive_voice"),
             sentiment=results.get("sentiment"),

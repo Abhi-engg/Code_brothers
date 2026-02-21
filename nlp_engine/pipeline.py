@@ -253,6 +253,9 @@ class WritingAssistant:
             futures["cliches"] = executor.submit(
                 style_transformer.detect_cliches, text
             )
+            futures["style_scores"] = executor.submit(
+                style_transformer.score_style_per_paragraph, text, doc
+            )
             
             # Collect results
             for key, future in futures.items():
@@ -287,6 +290,8 @@ class WritingAssistant:
                         # Store cliche list in issues if any found
                         if result.get("cliches") and isinstance(result["cliches"], list):
                             results["issues"]["cliches"] = result["cliches"]
+                    elif key == "style_scores":
+                        results["style_scores"] = result
                 except Exception as e:
                     results[key] = {"error": str(e)}
         
@@ -320,6 +325,7 @@ class WritingAssistant:
         
         if features["style"]:
             results["style_analysis"] = style_transformer.analyze_current_style(text)
+            results["style_scores"] = style_transformer.score_style_per_paragraph(text, doc)
         
         if features["consistency"]:
             results["consistency"] = self._analyze_consistency_combined(

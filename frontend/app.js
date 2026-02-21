@@ -1086,6 +1086,7 @@ function renderTransform() {
                 </div>
                 <h3 class="text-2xl font-semibold text-gray-900">Style Transformation Disabled</h3>
                 <p class="text-gray-500 mt-2">Enable "Style Transformation" in the feature toggles and re-analyze to see results.</p>
+                ${renderStyleHeatmap()}
             </div>
         `;
     }
@@ -1149,6 +1150,77 @@ function renderTransform() {
                     ✨ Copy Transformed
                 </button>
             </div>
+
+            ${renderStyleHeatmap()}
+        </div>
+    `;
+}
+
+// Render Style Heatmap
+function renderStyleHeatmap() {
+    const styleScores = analysisResults.style_scores;
+    if (!styleScores || styleScores.length === 0) return '';
+
+    const dimensions = ['formality', 'casualness', 'creativity', 'persuasiveness', 'journalistic', 'narrative'];
+    const dimColors = {
+        formality: '#3B82F6',
+        casualness: '#10B981',
+        creativity: '#8B5CF6',
+        persuasiveness: '#F59E0B',
+        journalistic: '#6366F1',
+        narrative: '#EC4899'
+    };
+    const dimEmojis = {
+        formality: '🏛️',
+        casualness: '😊',
+        creativity: '🎨',
+        persuasiveness: '💪',
+        journalistic: '📰',
+        narrative: '📖'
+    };
+
+    return `
+        <div class="mt-8">
+            <h4 class="font-semibold text-gray-900 mb-4 flex items-center text-lg">
+                <span class="mr-2">🎨</span> Style Heatmap by Paragraph
+            </h4>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm border-collapse">
+                    <thead>
+                        <tr>
+                            <th class="text-left p-2 text-gray-600 font-medium border-b border-gray-200">Paragraph</th>
+                            ${dimensions.map(d => `
+                                <th class="p-2 text-center text-gray-600 font-medium border-b border-gray-200" title="${d}">
+                                    ${dimEmojis[d]}<br><span class="text-xs">${d.charAt(0).toUpperCase() + d.slice(1)}</span>
+                                </th>
+                            `).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${styleScores.map((para, idx) => `
+                            <tr class="hover:bg-gray-50">
+                                <td class="p-2 border-b border-gray-100 max-w-[200px] truncate text-gray-700" title="${escapeHtml(para.text_preview)}">
+                                    <span class="font-medium text-gray-500">P${idx + 1}</span> ${escapeHtml(para.text_preview)}
+                                </td>
+                                ${dimensions.map(d => {
+                                    const score = para.scores[d] || 0;
+                                    const opacity = Math.max(0.1, score / 100);
+                                    const color = dimColors[d];
+                                    return `
+                                        <td class="p-2 border-b border-gray-100 text-center">
+                                            <div class="inline-flex items-center justify-center w-10 h-10 rounded-lg text-xs font-bold"
+                                                 style="background-color: ${color}${Math.round(opacity * 255).toString(16).padStart(2, '0')}; color: ${score > 50 ? 'white' : '#374151'}">
+                                                ${score}
+                                            </div>
+                                        </td>
+                                    `;
+                                }).join('')}
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-xs text-gray-500 mt-2">Higher scores indicate stronger presence of that style dimension (0-100)</p>
         </div>
     `;
 }
