@@ -155,6 +155,20 @@ class WritingAssistant:
             except Exception as e:
                 results["grammar_analysis"] = {"error": str(e), "total_issues": 0, "grammar_score": 100}
         
+        # Tone analysis (needs doc)
+        try:
+            results["tone_analysis"] = style_transformer.analyze_tone(doc, text)
+        except Exception as e:
+            results["tone_analysis"] = {"error": str(e), "dominant_tone": "unknown", "tone_scores": {}}
+        
+        # Tone transformation (if a specific target tone was requested)
+        target_tone = self.config.get("target_tone_value")
+        if target_tone and target_tone != "auto":
+            try:
+                results["tone_analysis"]["tone_transformation"] = style_transformer.transform_tone(text, doc, target_tone)
+            except Exception as e:
+                results["tone_analysis"]["tone_transformation"] = {"error": str(e)}
+        
         # Parallel processing of independent analyses
         if self.enable_parallel:
             results = self._run_parallel_analyses(

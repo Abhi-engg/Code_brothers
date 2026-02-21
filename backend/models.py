@@ -14,6 +14,18 @@ class TargetStyle(str, Enum):
     ACADEMIC = "academic"
 
 
+class ToneType(str, Enum):
+    """Available tone types for analysis and transformation"""
+    AUTO = "auto"
+    ASSERTIVE = "assertive"
+    EMPATHETIC = "empathetic"
+    PERSUASIVE = "persuasive"
+    PROFESSIONAL = "professional"
+    FRIENDLY = "friendly"
+    URGENT = "urgent"
+    NARRATIVE = "narrative"
+
+
 class FeatureToggles(BaseModel):
     """Feature toggles for analysis"""
     text_analysis: bool = Field(default=True, description="Enable basic text analysis (tokens, sentences, entities)")
@@ -31,6 +43,7 @@ class AnalysisRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=50000, description="Text to analyze")
     features: Optional[FeatureToggles] = Field(default=None, description="Feature toggles")
     target_style: Optional[TargetStyle] = Field(default=TargetStyle.FORMAL, description="Target style for transformation")
+    target_tone: Optional[ToneType] = Field(default=ToneType.AUTO, description="Target tone for tone transformation")
     long_sentence_threshold: Optional[int] = Field(default=25, ge=10, le=200, description="Word count threshold for long sentences")
     repeated_word_min_count: Optional[int] = Field(default=3, ge=2, le=10, description="Minimum count for repeated word detection")
     
@@ -117,6 +130,8 @@ class AnalysisResponse(BaseModel):
     scores: Optional[AnalysisScores] = None
     # Grammar analysis
     grammar_analysis: Optional[Dict[str, Any]] = None
+    # Tone analysis
+    tone_analysis: Optional[Dict[str, Any]] = None
     # New enhanced features
     passive_voice: Optional[Dict[str, Any]] = None
     sentiment: Optional[Dict[str, Any]] = None

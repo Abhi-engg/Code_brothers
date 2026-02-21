@@ -28,6 +28,7 @@ const elements = {
     toastContainer: document.getElementById('toast-container'),
     apiStatus: document.getElementById('api-status'),
     targetStyle: document.getElementById('target-style'),
+    targetTone: document.getElementById('target-tone'),
     thresholdSentence: document.getElementById('threshold-sentence'),
     thresholdRepeated: document.getElementById('threshold-repeated')
 };
@@ -150,6 +151,7 @@ async function analyzeText() {
         text: text,
         features: features,
         target_style: elements.targetStyle.value,
+        target_tone: elements.targetTone ? elements.targetTone.value : 'auto',
         long_sentence_threshold: parseInt(elements.thresholdSentence.value) || 25,
         repeated_word_min_count: parseInt(elements.thresholdRepeated.value) || 3
     };
@@ -305,6 +307,9 @@ function renderTab(tabName) {
             break;
         case 'enhancements':
             content = renderEnhancements();
+            break;
+        case 'tone':
+            content = renderTone();
             break;
         case 'suggestions':
             content = renderSuggestions();
@@ -736,6 +741,133 @@ function renderEnhancements() {
     
     html += '</div>';
     return html;
+}
+
+// ── Render Tone Tab ──
+function renderTone() {
+    const tone = analysisResults.tone_analysis;
+    if (!tone || tone.error) {
+        return `<div class="text-center py-12 text-gray-500">
+            <div class="text-4xl mb-2">🎭</div>
+            <p>Tone analysis unavailable${tone && tone.error ? ': ' + tone.error : ''}</p>
+        </div>`;
+    }
+
+    const scores = tone.tone_scores || {};
+    const dominant = tone.dominant_tone || 'professional';
+    const label = tone.tone_label || dominant;
+    const description = tone.tone_description || '';
+    const color = tone.tone_color || '#3B82F6';
+    const perSentence = tone.per_sentence || [];
+    const defs = tone.tone_definitions || {};
+
+    // Build radar-style bar chart
+    const toneKeys = Object.keys(scores);
+    const maxScore = Math.max(...Object.values(scores), 0.01);
+
+    let barsHtml = toneKeys.map(key => {
+        const val = scores[key] || 0;
+        const pct = Math.round((val / 1) * 100); // 0-1 → 0-100
+        const def = defs[key] || {};
+        const c = def.color || '#6B7280';
+        const active = key === dominant ? 'ring-2 ring-offset-1' : '';
+        return `
+            <div class="flex items-center gap-3 ${active} rounded-lg p-2" style="${key === dominant ? 'ring-color:' + c : ''}">
+                <span class="w-28 text-sm font-medium text-gray-700 capitalize">${def.label || key}</span>
+                <div class="flex-1 bg-gray-200 rounded-full h-3 relative overflow-hidden">
+                    <div class="h-3 rounded-full transition-all duration-700" style="width:${pct}%; background:${c}"></div>
+                </div>
+                <span class="w-12 text-right text-sm font-semibold" style="color:${c}">${(val * 100).toFixed(0)}%</span>
+            </div>
+        `;
+    }).join('');
+
+    // Per-sentence tone trajectory
+    let trajectoryHtml = '';
+    if (perSentence.length > 0) {
+        const sentRows = perSentence.map((s, idx) => {
+            const sDef = defs[s.dominant] || {};
+            const sColor = sDef.color || '#6B7280';
+            return `
+                <div class="flex items-start gap-3 py-2 border-b border-gray-100 last:border-0">
+                    <span class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white" style="background:${sColor}">${idx + 1}</span>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm text-gray-700 truncate" title="${s.text}">${truncateText(s.text, 120)}</p>
+                        <span class="text-xs font-medium capitalize" style="color:${sColor}">${sDef.label || s.dominant}</span>
+                    </div>
+                    <div class="flex-shrink-0 flex gap-0.5">
+                        ${toneKeys.map(k => {
+                            const sv = s.scores[k] || 0;
+                            const sc = (defs[k] || {}).color || '#E5E7EB';
+                            const opacity = Math.max(0.15, sv);
+                            return `<div class="w-2 h-6 rounded-sm" style="background:${sc}; opacity:${opacity}" title="${k}: ${(sv*100).toFixed(0)}%"></div>`;
+                        }).join('')}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        trajectoryHtml = `
+            <div class="mt-6">
+                <h4 class="font-semibold text-gray-900 mb-3 flex items-center">
+                    <span class="text-lg mr-2">📈</span> Tone Trajectory (per sentence)
+                </h4>
+                <div class="bg-gray-50 rounded-lg p-4 max-h-80 overflow-y-auto space-y-0">
+                    ${sentRows}
+                </div>
+            </div>
+        `;
+    }
+
+    // Tone transformation result (if target tone was set)
+    let transformHtml = '';
+    const tt = analysisResults.tone_transformation || analysisResults.tone_analysis?.tone_transformation;
+    if (tt && tt.transformed && tt.change_count > 0) {
+        transformHtml = `
+            <div class="mt-6 border-l-4 border-amber-500 rounded-lg bg-amber-50 p-4">
+                <h4 class="font-semibold text-amber-900 mb-2 flex items-center">
+                    <span class="text-lg mr-2">🔄</span> Tone Transformation → ${tt.tone_label || tt.target_tone}
+                </h4>
+                <p class="text-sm text-gray-700 mb-3">${tt.change_count} change(s) applied</p>
+                <div class="bg-white rounded-lg p-3 text-sm text-gray-800 whitespace-pre-wrap">${tt.transformed}</div>
+                ${tt.changes && tt.changes.length ? `
+                    <div class="mt-3 space-y-1">
+                        ${tt.changes.slice(0, 10).map(c => `
+                            <div class="text-xs text-amber-800"><span class="line-through">${c.original}</span> → <span class="font-semibold">${c.replacement}</span></div>
+                        `).join('')}
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    return `
+        <div class="space-y-6 animate-fade-in">
+            <!-- Dominant Tone Header -->
+            <div class="rounded-xl p-6" style="background: linear-gradient(135deg, ${color}15, ${color}30)">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 class="text-xl font-bold text-gray-900 flex items-center">
+                            <span class="text-3xl mr-3">🎭</span> Tone Analysis
+                        </h3>
+                        <p class="text-sm text-gray-600 mt-1">${description}</p>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-3xl font-bold capitalize" style="color:${color}">${label}</div>
+                        <div class="text-xs text-gray-500">Dominant Tone</div>
+                    </div>
+                </div>
+
+                <!-- Tone Scores Bar Chart -->
+                <div class="space-y-2 mt-4">
+                    ${barsHtml}
+                </div>
+            </div>
+
+            ${trajectoryHtml}
+            ${transformHtml}
+        </div>
+    `;
 }
 
 // Render Issues Tab

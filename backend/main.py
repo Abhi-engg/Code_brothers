@@ -140,7 +140,8 @@ async def analyze_endpoint(request: AnalysisRequest):
         config = {
             "long_sentence_threshold": request.long_sentence_threshold,
             "repeated_word_min_count": request.repeated_word_min_count,
-            "target_style": request.target_style.value if request.target_style else "formal"
+            "target_style": request.target_style.value if request.target_style else "formal",
+            "target_tone_value": request.target_tone.value if request.target_tone else "auto"
         }
         
         # Create configured assistant
@@ -173,6 +174,8 @@ async def analyze_endpoint(request: AnalysisRequest):
             scores=results.get("scores"),
             # Grammar analysis
             grammar_analysis=results.get("grammar_analysis"),
+            # Tone analysis
+            tone_analysis=results.get("tone_analysis"),
             # New enhanced features
             passive_voice=results.get("passive_voice"),
             sentiment=results.get("sentiment"),

@@ -766,3 +766,387 @@ def detect_cliches(text: str) -> Dict[str, Any]:
         "severity": "high" if len(found_cliches) > 3 else "medium" if len(found_cliches) > 0 else "none",
         "message": f"Found {len(found_cliches)} overused phrases or clichés" if found_cliches else "No clichés detected"
     }
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Tone Analysis & Transformation
+# ──────────────────────────────────────────────────────────────────────────
+
+# 7 tone archetypes with detection patterns
+TONE_DEFINITIONS = {
+    "assertive": {
+        "label": "Assertive",
+        "description": "Direct, confident, commanding",
+        "color": "#EF4444",
+    },
+    "empathetic": {
+        "label": "Empathetic",
+        "description": "Inclusive, compassionate, understanding",
+        "color": "#EC4899",
+    },
+    "persuasive": {
+        "label": "Persuasive",
+        "description": "Convincing, compelling, motivating",
+        "color": "#F59E0B",
+    },
+    "professional": {
+        "label": "Professional",
+        "description": "Formal, measured, authoritative",
+        "color": "#3B82F6",
+    },
+    "friendly": {
+        "label": "Friendly",
+        "description": "Warm, approachable, conversational",
+        "color": "#10B981",
+    },
+    "urgent": {
+        "label": "Urgent",
+        "description": "Time-sensitive, action-oriented, pressing",
+        "color": "#F97316",
+    },
+    "narrative": {
+        "label": "Narrative",
+        "description": "Descriptive, vivid, story-driven",
+        "color": "#8B5CF6",
+    },
+}
+
+# ── Pattern word-banks ──
+
+_EMPATHETIC_WORDS = {
+    "we", "our", "us", "together", "understand", "feel", "care",
+    "appreciate", "support", "help", "share", "empathy", "compassion",
+    "listen", "comfort", "kindness", "grateful", "team",
+}
+
+_POWER_WORDS = {
+    "proven", "guaranteed", "exclusive", "secret", "ultimate",
+    "revolutionary", "breakthrough", "remarkable", "incredible",
+    "powerful", "extraordinary", "essential", "critical", "undeniable",
+    "unmatched", "transform", "ignite", "unleash", "dominate",
+    "skyrocket", "game-changing", "jaw-dropping", "stunning",
+}
+
+_HEDGE_WORDS = {
+    "perhaps", "possibly", "arguably", "somewhat", "relatively",
+    "generally", "typically", "approximately", "seemingly",
+    "apparently", "ostensibly", "conceivably", "presumably",
+}
+
+_URGENT_WORDS = {
+    "now", "immediately", "urgent", "asap", "hurry", "deadline",
+    "critical", "emergency", "act", "fast", "quick", "rapid",
+    "today", "limited", "expires", "rush", "priority", "alert",
+}
+
+_SENSORY_WORDS = {
+    "bright", "dark", "gleaming", "shadowy", "shimmering", "vivid",
+    "whisper", "roar", "echo", "murmur", "rustle", "thunder",
+    "silky", "rough", "smooth", "cold", "warm", "icy", "burning",
+    "sweet", "bitter", "fragrant", "pungent", "stale", "fresh",
+    "delicious", "sour", "crisp", "gentle", "fierce", "soft",
+}
+
+_FRIENDLY_CONTRACTIONS = set(CONTRACTIONS.keys())
+
+_ACTION_VERBS_ASSERTIVE = {
+    "must", "will", "shall", "demand", "require", "insist",
+    "command", "decide", "achieve", "conquer", "lead", "commit",
+    "guarantee", "ensure", "deliver", "execute", "own", "drive",
+}
+
+
+def analyze_tone(doc, text: str) -> Dict[str, Any]:
+    """
+    Detect the tone of the text across 7 dimensions, returning per-sentence
+    tone scores and an overall tone profile.
+
+    Dimensions: assertive, empathetic, persuasive, professional, friendly,
+                urgent, narrative.
+
+    Args:
+        doc:  spaCy Doc object
+        text: raw input text
+
+    Returns:
+        Dict with overall_tone, tone_scores, per_sentence, dominant_tone,
+        tone_description, and tone_definitions metadata.
+    """
+    sentences = list(doc.sents)
+    if not sentences:
+        return _empty_tone_result()
+
+    per_sentence: List[Dict[str, Any]] = []
+    accumulated = {t: 0.0 for t in TONE_DEFINITIONS}
+
+    for sent in sentences:
+        scores = _score_sentence_tone(sent, text)
+        per_sentence.append({
+            "text": sent.text.strip(),
+            "start": sent.start_char,
+            "end": sent.end_char,
+            "scores": scores,
+            "dominant": max(scores, key=scores.get),
+        })
+        for t, v in scores.items():
+            accumulated[t] += v
+
+    n = len(sentences)
+    overall = {t: round(v / n, 3) for t, v in accumulated.items()}
+    dominant = max(overall, key=overall.get)
+
+    return {
+        "tone_scores": overall,
+        "dominant_tone": dominant,
+        "tone_label": TONE_DEFINITIONS[dominant]["label"],
+        "tone_description": TONE_DEFINITIONS[dominant]["description"],
+        "tone_color": TONE_DEFINITIONS[dominant]["color"],
+        "per_sentence": per_sentence,
+        "sentence_count": n,
+        "tone_definitions": {
+            k: {"label": v["label"], "description": v["description"], "color": v["color"]}
+            for k, v in TONE_DEFINITIONS.items()
+        },
+    }
+
+
+def _empty_tone_result() -> Dict[str, Any]:
+    """Return a zeroed-out tone result for empty input."""
+    zero = {t: 0.0 for t in TONE_DEFINITIONS}
+    return {
+        "tone_scores": zero,
+        "dominant_tone": "professional",
+        "tone_label": "Professional",
+        "tone_description": TONE_DEFINITIONS["professional"]["description"],
+        "tone_color": TONE_DEFINITIONS["professional"]["color"],
+        "per_sentence": [],
+        "sentence_count": 0,
+        "tone_definitions": {
+            k: {"label": v["label"], "description": v["description"], "color": v["color"]}
+            for k, v in TONE_DEFINITIONS.items()
+        },
+    }
+
+
+def _score_sentence_tone(sent, full_text: str) -> Dict[str, float]:
+    """Score a single sentence across all 7 tone dimensions (0-1 each)."""
+    tokens = list(sent)
+    words = [t for t in tokens if t.is_alpha]
+    word_count = len(words) or 1
+    lower_words = {t.lower_ for t in words}
+    lemmas = {t.lemma_.lower() for t in words}
+    text = sent.text.strip()
+
+    scores: Dict[str, float] = {}
+
+    # ── Assertive ──
+    imperative = 1.0 if (tokens and tokens[0].pos_ == "VERB" and tokens[0].tag_ == "VB") else 0.0
+    assertive_hits = len(lemmas & _ACTION_VERBS_ASSERTIVE) / word_count
+    exclamation = 0.3 if text.endswith("!") else 0.0
+    scores["assertive"] = min(1.0, imperative * 0.5 + assertive_hits * 3.0 + exclamation)
+
+    # ── Empathetic ──
+    emp_hits = len(lower_words & _EMPATHETIC_WORDS) / word_count
+    scores["empathetic"] = min(1.0, emp_hits * 4.0)
+
+    # ── Persuasive ──
+    rhetorical = 0.4 if text.endswith("?") else 0.0
+    power_hits = len(lemmas & _POWER_WORDS) / word_count
+    scores["persuasive"] = min(1.0, rhetorical + power_hits * 4.0)
+
+    # ── Professional ──
+    formal_vocab = len(lemmas & _HEDGE_WORDS) / word_count
+    no_contractions = 0.2 if not any(t.lower_ in _FRIENDLY_CONTRACTIONS for t in tokens) else 0.0
+    long_words = sum(1 for t in words if len(t.text) > 8) / word_count
+    scores["professional"] = min(1.0, formal_vocab * 4.0 + no_contractions + long_words * 1.5)
+
+    # ── Friendly ──
+    has_contraction = 0.3 if any(t.lower_ in _FRIENDLY_CONTRACTIONS for t in tokens) else 0.0
+    excl_friendly = 0.25 if text.endswith("!") else 0.0
+    short_sent = 0.2 if word_count <= 10 else 0.0
+    scores["friendly"] = min(1.0, has_contraction + excl_friendly + short_sent)
+
+    # ── Urgent ──
+    urgent_hits = len(lemmas & _URGENT_WORDS) / word_count
+    short_urgent = 0.2 if word_count <= 8 else 0.0
+    scores["urgent"] = min(1.0, urgent_hits * 5.0 + short_urgent + exclamation)
+
+    # ── Narrative ──
+    sensory_hits = len(lemmas & _SENSORY_WORDS) / word_count
+    past_tense = sum(1 for t in words if t.tag_ in ("VBD", "VBN")) / word_count
+    adj_count = sum(1 for t in words if t.pos_ == "ADJ") / word_count
+    scores["narrative"] = min(1.0, sensory_hits * 4.0 + past_tense * 1.5 + adj_count * 1.0)
+
+    # Round
+    return {k: round(v, 3) for k, v in scores.items()}
+
+
+# ── Tone Transformation ──
+
+_TONE_TRANSFORMS: Dict[str, Dict[str, Any]] = {
+    "assertive": {
+        "replacements": {
+            "maybe": "certainly",
+            "perhaps": "clearly",
+            "might": "will",
+            "could": "must",
+            "i think": "I am certain",
+            "it seems": "it is clear",
+            "possibly": "undoubtedly",
+            "i believe": "I assert",
+            "in my opinion": "the fact is",
+            "it appears": "it is evident",
+        },
+        "sentence_suffix": "",
+    },
+    "empathetic": {
+        "replacements": {
+            "you must": "we can together",
+            "you should": "perhaps we could",
+            "you need to": "it might help to",
+            "do this": "we could try this",
+            "i want": "I understand and I hope",
+            "immediately": "when you feel ready",
+            "required": "appreciated",
+        },
+        "sentence_suffix": "",
+    },
+    "persuasive": {
+        "replacements": {
+            "good": "exceptional",
+            "nice": "remarkable",
+            "change": "transform",
+            "help": "empower",
+            "use": "leverage",
+            "important": "critical",
+            "big": "monumental",
+            "try": "seize the opportunity to",
+            "think about": "imagine",
+            "consider": "envision",
+        },
+        "sentence_suffix": "",
+    },
+    "professional": {
+        "replacements": {
+            "gonna": "going to",
+            "wanna": "wish to",
+            "gotta": "need to",
+            "stuff": "materials",
+            "things": "matters",
+            "ok": "acceptable",
+            "cool": "satisfactory",
+            "awesome": "commendable",
+            "great": "excellent",
+            "kind of": "somewhat",
+        },
+        "sentence_suffix": "",
+    },
+    "friendly": {
+        "replacements": {
+            "therefore": "so",
+            "however": "but",
+            "furthermore": "also",
+            "consequently": "so basically",
+            "regarding": "about",
+            "utilize": "use",
+            "demonstrate": "show",
+            "sufficient": "enough",
+            "commence": "start",
+            "terminate": "end",
+        },
+        "sentence_suffix": "",
+    },
+    "urgent": {
+        "replacements": {
+            "consider": "act on",
+            "eventually": "now",
+            "later": "immediately",
+            "soon": "right now",
+            "when possible": "immediately",
+            "at some point": "today",
+            "should": "must",
+            "might want to": "need to",
+            "could": "must",
+            "please": "you need to",
+        },
+        "sentence_suffix": "",
+    },
+    "narrative": {
+        "replacements": {
+            "walked": "strode",
+            "said": "whispered",
+            "looked": "gazed",
+            "went": "ventured",
+            "was": "appeared",
+            "big": "towering",
+            "small": "diminutive",
+            "happy": "radiant",
+            "sad": "melancholic",
+            "old": "weathered",
+        },
+        "sentence_suffix": "",
+    },
+}
+
+
+def transform_tone(text: str, doc, target_tone: str) -> Dict[str, Any]:
+    """
+    Transform the text towards a target tone using word substitution rules.
+
+    Args:
+        text:        raw input text
+        doc:         spaCy Doc
+        target_tone: one of the 7 tone keys
+
+    Returns:
+        Dict with original, transformed, changes list, target_tone, before/after scores.
+    """
+    target_tone = target_tone.lower()
+    if target_tone not in _TONE_TRANSFORMS:
+        return {
+            "original": text,
+            "transformed": text,
+            "changes": [],
+            "change_count": 0,
+            "target_tone": target_tone,
+            "error": f"Unknown tone: {target_tone}. Choose from: {', '.join(_TONE_TRANSFORMS.keys())}",
+        }
+
+    rules = _TONE_TRANSFORMS[target_tone]
+    transformed = text
+    changes: List[Dict[str, str]] = []
+
+    for old, new in sorted(rules["replacements"].items(), key=lambda x: len(x[0]), reverse=True):
+        pattern = re.compile(re.escape(old), re.IGNORECASE)
+        matches = pattern.findall(transformed)
+        for match in matches:
+            replacement = new if match[0].islower() else new.capitalize()
+            changes.append({
+                "type": "tone_adjustment",
+                "original": match,
+                "replacement": replacement,
+                "target_tone": target_tone,
+                "reason": f"Adjusted for {TONE_DEFINITIONS[target_tone]['label']} tone",
+            })
+        if matches:
+            transformed = pattern.sub(
+                lambda m: new.capitalize() if m.group()[0].isupper() else new,
+                transformed,
+            )
+
+    # Compute before/after tone scores
+    from .text_analyzer import get_nlp
+    new_doc = get_nlp()(transformed)
+    before_scores = analyze_tone(doc, text).get("tone_scores", {})
+    after_scores = analyze_tone(new_doc, transformed).get("tone_scores", {})
+
+    return {
+        "original": text,
+        "transformed": transformed,
+        "changes": changes,
+        "change_count": len(changes),
+        "target_tone": target_tone,
+        "tone_label": TONE_DEFINITIONS[target_tone]["label"],
+        "before_scores": before_scores,
+        "after_scores": after_scores,
+    }
