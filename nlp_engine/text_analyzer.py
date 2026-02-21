@@ -167,3 +167,221 @@ def analyze_sentence_structure(doc) -> List[Dict[str, Any]]:
         })
     
     return structures
+
+
+def detect_passive_voice(doc) -> List[Dict[str, Any]]:
+    """
+    Detect passive voice constructions in the text.
+    
+    Args:
+        doc: spaCy Doc object
+        
+    Returns:
+        List of passive voice sentences with details
+    """
+    passive_sentences = []
+    
+    for sent_idx, sent in enumerate(doc.sents):
+        # Look for passive voice patterns
+        # Passive voice typically has: (be verb) + past participle
+        has_passive = False
+        passive_verbs = []
+        
+        for token in sent:
+            # Check for passive auxiliary (be verbs) followed by past participle
+            if token.dep_ == "auxpass" or (
+                token.lemma_ in ["be", "get"] and 
+                any(child.tag_ == "VBN" for child in token.children)
+            ):
+                has_passive = True
+                # Find the main verb (past participle)
+                for child in token.head.children:
+                    if child.tag_ == "VBN":
+                        passive_verbs.append(f"{token.text} {child.text}")
+                        break
+                if not passive_verbs and token.head.tag_ == "VBN":
+                    passive_verbs.append(f"{token.text} {token.head.text}")
+        
+        if has_passive:
+            passive_sentences.append({
+                "index": sent_idx,
+                "sentence": sent.text.strip(),
+                "passive_constructions": passive_verbs,
+                "severity": "medium",
+                "suggestion": "Consider using active voice for clearer, more direct writing"
+            })
+    
+    return passive_sentences
+
+
+def analyze_sentiment(doc) -> Dict[str, Any]:
+    """
+    Analyze sentiment polarity and subjectivity of the text.
+    
+    Args:
+        doc: spaCy Doc object
+        
+    Returns:
+        Dictionary with sentiment analysis results
+    """
+    # Calculate sentiment using word-level analysis
+    positive_words = {
+        'good', 'great', 'excellent', 'amazing', 'wonderful', 'fantastic', 
+        'perfect', 'beautiful', 'awesome', 'outstanding', 'superb', 'brilliant',
+        'positive', 'happy', 'delighted', 'pleased', 'satisfied', 'love',
+        'best', 'better', 'improve', 'success', 'successful', 'benefit'
+    }
+    
+    negative_words = {
+        'bad', 'terrible', 'awful', 'horrible', 'poor', 'worst', 'worse',
+        'negative', 'sad', 'unhappy', 'disappointed', 'dissatisfied', 'hate',
+        'problem', 'issue', 'fail', 'failure', 'difficult', 'hard', 'wrong',
+        'error', 'mistake', 'loss', 'lose', 'damage', 'harm', 'risk'
+    }
+    
+    positive_count = 0
+    negative_count = 0
+    total_words = 0
+    
+    for token in doc:
+        if token.is_alpha and not token.is_stop:
+            total_words += 1
+            lemma = token.lemma_.lower()
+            if lemma in positive_words:
+                positive_count += 1
+            elif lemma in negative_words:
+                negative_count += 1
+    
+    # Calculate sentiment score (-1 to +1)
+    if total_words > 0:
+        sentiment_score = (positive_count - negative_count) / total_words
+    else:
+        sentiment_score = 0.0
+    
+    # Determine sentiment category
+    if sentiment_score > 0.1:
+        sentiment = "positive"
+    elif sentiment_score < -0.1:
+        sentiment = "negative"
+    else:
+        sentiment = "neutral"
+    
+    return {
+        "sentiment": sentiment,
+        "score": round(sentiment_score, 3),
+        "positive_words": positive_count,
+        "negative_words": negative_count,
+        "total_words_analyzed": total_words,
+        "interpretation": f"The text has a {sentiment} tone with a sentiment score of {round(sentiment_score, 3)}"
+    }
+
+
+def analyze_vocabulary_complexity(doc, tokens: List[str]) -> Dict[str, Any]:
+    """
+    Analyze vocabulary complexity and richness.
+    
+    Args:
+        doc: spaCy Doc object
+        tokens: List of token strings
+        
+    Returns:
+        Dictionary with vocabulary metrics
+    """
+    # Filter out punctuation and spaces
+    words = [token.text.lower() for token in doc if token.is_alpha]
+    
+    if not words:
+        return {
+            "unique_words": 0,
+            "total_words": 0,
+            "lexical_diversity": 0.0,
+            "advanced_words": 0,
+            "complexity_level": "unknown"
+        }
+    
+    # Calculate lexical diversity (Type-Token Ratio)
+    unique_words = len(set(words))
+    total_words = len(words)
+    lexical_diversity = unique_words / total_words if total_words > 0 else 0
+    
+    # Identify advanced/complex words (more than 3 syllables or 8+ characters)
+    advanced_words = []
+    for token in doc:
+        if token.is_alpha and (len(token.text) >= 8 or token.text.count('tion') > 0 or 
+                               token.text.count('sion') > 0):
+            advanced_words.append(token.text.lower())
+    
+    advanced_word_count = len(set(advanced_words))
+    advanced_word_ratio = advanced_word_count / unique_words if unique_words > 0 else 0
+    
+    # Determine complexity level
+    if lexical_diversity > 0.7 and advanced_word_ratio > 0.2:
+        complexity = "advanced"
+    elif lexical_diversity > 0.5 and advanced_word_ratio > 0.1:
+        complexity = "intermediate"
+    else:
+        complexity = "basic"
+    
+    return {
+        "unique_words": unique_words,
+        "total_words": total_words,
+        "lexical_diversity": round(lexical_diversity, 3),
+        "advanced_words": advanced_word_count,
+        "advanced_word_ratio": round(advanced_word_ratio, 3),
+        "complexity_level": complexity,
+        "interpretation": f"Vocabulary is {complexity} with {round(lexical_diversity * 100, 1)}% lexical diversity"
+    }
+
+
+def detect_filler_words(tokens: List[str]) -> Dict[str, Any]:
+    """
+    Detect filler words and phrases that weaken writing.
+    
+    Args:
+        tokens: List of token strings
+        
+    Returns:
+        Dictionary with filler word analysis
+    """
+    filler_words = {
+        'just', 'really', 'very', 'quite', 'rather', 'somewhat', 'somehow',
+        'actually', 'basically', 'literally', 'seriously', 'honestly',
+        'obviously', 'clearly', 'simply', 'merely', 'only',
+        'perhaps', 'maybe', 'probably', 'possibly', 'presumably',
+        'seem', 'seems', 'seemed', 'appear', 'appears', 'appeared',
+        'tend', 'tends', 'tended', 'like', 'kind', 'sort'
+    }
+    
+    filler_phrases = [
+        'a bit', 'a little', 'kind of', 'sort of', 'type of',
+        'in order to', 'due to the fact', 'in spite of the fact',
+        'at this point in time', 'for the purpose of'
+    ]
+    
+    text_lower = ' '.join(tokens).lower()
+    found_fillers = {}
+    total_count = 0
+    
+    # Count individual filler words
+    for word in tokens:
+        word_lower = word.lower()
+        if word_lower in filler_words:
+            found_fillers[word_lower] = found_fillers.get(word_lower, 0) + 1
+            total_count += 1
+    
+    # Check for filler phrases
+    for phrase in filler_phrases:
+        count = text_lower.count(phrase)
+        if count > 0:
+            found_fillers[phrase] = count
+            total_count += count
+    
+    severity = "high" if total_count > 10 else "medium" if total_count > 5 else "low"
+    
+    return {
+        "total_fillers": total_count,
+        "unique_fillers": len(found_fillers),
+        "filler_details": dict(sorted(found_fillers.items(), key=lambda x: x[1], reverse=True)[:10]),
+        "severity": severity,
+        "suggestion": "Remove unnecessary filler words to make writing more concise and impactful" if total_count > 0 else None
+    }

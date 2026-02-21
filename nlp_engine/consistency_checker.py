@@ -708,3 +708,216 @@ class NarrativeConsistencyAnalyzer:
             "characters_tracked": len(self.character_memory),
             "consistency_score": max(0, 100 - (len(issues) * 10))
         }
+
+
+def check_tense_consistency(doc) -> Dict[str, Any]:
+    """
+    Check for tense consistency throughout the text.
+    
+    Args:
+        doc: spaCy Doc object
+        
+    Returns:
+        Dictionary with tense analysis and issues
+    """
+    tense_map = {
+        'VBD': 'past',      # past tense
+        'VBN': 'past',      # past participle
+        'VB': 'present',    # base form
+        'VBP': 'present',   # present non-3rd person
+        'VBZ': 'present',   # present 3rd person
+        'VBG': 'continuous' # gerund/present participle
+    }
+    
+    tense_by_sentence = []
+    all_tenses = []
+    
+    for sent_idx, sent in enumerate(doc.sents):
+        sentence_tenses = []
+        main_tense = None
+        
+        for token in sent:
+            if token.pos_ == 'VERB' or token.pos_ == 'AUX':
+                tense = tense_map.get(token.tag_, 'other')
+                if tense != 'other':
+                    sentence_tenses.append(tense)
+                    all_tenses.append(tense)
+        
+        # Determine dominant tense for sentence
+        if sentence_tenses:
+            main_tense = max(set(sentence_tenses), key=sentence_tenses.count)
+        
+        tense_by_sentence.append({
+            "sentence_index": sent_idx,
+            "sentence": sent.text.strip(),
+            "tenses": sentence_tenses,
+            "main_tense": main_tense
+        })
+    
+    # Identify dominant tense in document
+    if all_tenses:
+        dominant_tense = max(set(all_tenses), key=all_tenses.count)
+        tense_distribution = {
+            "past": all_tenses.count("past"),
+            "present": all_tenses.count("present"),
+            "continuous": all_tenses.count("continuous")
+        }
+    else:
+        dominant_tense = None
+        tense_distribution = {}
+    
+    # Detect inconsistencies
+    issues = []
+    for sent_data in tense_by_sentence:
+        if sent_data["main_tense"] and sent_data["main_tense"] != dominant_tense:
+            # Allow some flexibility (e.g., dialogue, quotes)
+            if sent_data["sentence_index"] > 0:  # Don't flag first sentence
+                issues.append({
+                    "sentence_index": sent_data["sentence_index"],
+                    "sentence": sent_data["sentence"][:100] + "..." if len(sent_data["sentence"]) > 100 else sent_data["sentence"],
+                    "tense": sent_data["main_tense"],
+                    "expected": dominant_tense,
+                    "severity": "medium"
+                })
+    
+    # Calculate consistency score
+    if all_tenses:
+        consistency_ratio = all_tenses.count(dominant_tense) / len(all_tenses)
+        consistency_score = round(consistency_ratio * 100, 2)
+    else:
+        consistency_score = 100.0
+    
+    return {
+        "dominant_tense": dominant_tense,
+        "tense_distribution": tense_distribution,
+        "consistency_score": consistency_score,
+        "sentences": tense_by_sentence,
+        "issues": issues,
+        "issue_count": len(issues),
+        "interpretation": f"Text primarily uses {dominant_tense} tense" if dominant_tense else "No clear tense detected"
+    }
+
+
+def check_perspective_consistency(doc) -> Dict[str, Any]:
+    """
+    Check for perspective/point-of-view consistency.
+    
+    Args:
+        doc: spaCy Doc object
+        
+    Returns:
+        Dictionary with perspective analysis
+    """
+    # Pronoun categories for perspective detection
+    first_person = {'i', 'me', 'my', 'mine', 'we', 'us', 'our', 'ours', 'myself', 'ourselves'}
+    second_person = {'you', 'your', 'yours', 'yourself', 'yourselves'}
+    third_person = {'he', 'him', 'his', 'she', 'her', 'hers', 'they', 'them', 'their', 
+                     'theirs', 'himself', 'herself', 'themselves', 'it', 'its', 'itself'}
+    
+    perspective_by_sentence = []
+    all_perspectives = []
+    
+    for sent_idx, sent in enumerate(doc.sents):
+        first_count = 0
+        second_count = 0
+        third_count = 0
+        
+        for token in sent:
+            if token.pos_ == 'PRON':
+                lower_text = token.text.lower()
+                if lower_text in first_person:
+                    first_count += 1
+                    all_perspectives.append('first')
+                elif lower_text in second_person:
+                    second_count += 1
+                    all_perspectives.append('second')
+                elif lower_text in third_person:
+                    third_count += 1
+                    all_perspectives.append('third')
+        
+        # Determine dominant perspective for sentence
+        counts = {
+            'first': first_count,
+            'second': second_count,
+            'third': third_count
+        }
+        main_perspective = max(counts, key=counts.get) if any(counts.values()) else None
+        
+        perspective_by_sentence.append({
+            "sentence_index": sent_idx,
+            "sentence": sent.text.strip(),
+            "first_person": first_count,
+            "second_person": second_count,
+            "third_person": third_count,
+            "main_perspective": main_perspective if any(counts.values()) else None
+        })
+    
+    # Identify dominant perspective
+    if all_perspectives:
+        dominant_perspective = max(set(all_perspectives), key=all_perspectives.count)
+        perspective_distribution = {
+            "first_person": all_perspectives.count("first"),
+            "second_person": all_perspectives.count("second"),
+            "third_person": all_perspectives.count("third")
+        }
+    else:
+        dominant_perspective = None
+        perspective_distribution = {}
+    
+    # Detect shifts
+    issues = []
+    prev_perspective = None
+    
+    for sent_data in perspective_by_sentence:
+        curr_perspective = sent_data["main_perspective"]
+        
+        if curr_perspective and prev_perspective and curr_perspective != prev_perspective:
+            # Perspective shift detected
+            issues.append({
+                "sentence_index": sent_data["sentence_index"],
+                "sentence": sent_data["sentence"][:100] + "..." if len(sent_data["sentence"]) > 100 else sent_data["sentence"],
+                "from_perspective": prev_perspective,
+                "to_perspective": curr_perspective,
+                "severity": "medium"
+            })
+        
+        if curr_perspective:
+            prev_perspective = curr_perspective
+    
+    # Calculate consistency
+    if all_perspectives:
+        consistency_ratio = all_perspectives.count(dominant_perspective) / len(all_perspectives)
+        consistency_score = round(consistency_ratio * 100, 2)
+    else:
+        consistency_score = 100.0
+    
+    return {
+        "dominant_perspective": dominant_perspective,
+        "perspective_distribution": perspective_distribution,
+        "consistency_score": consistency_score,
+        "sentences": perspective_by_sentence,
+        "perspective_shifts": issues,
+        "shift_count": len(issues),
+        "interpretation": get_perspective_interpretation(dominant_perspective, len(issues))
+    }
+
+
+def get_perspective_interpretation(perspective: str, shift_count: int) -> str:
+    """Generate interpretation of perspective analysis."""
+    if not perspective:
+        return "No clear narrative perspective detected"
+    
+    perspective_names = {
+        "first": "first-person",
+        "second": "second-person",
+        "third": "third-person"
+    }
+    
+    name = perspective_names.get(perspective, perspective)
+    
+    if shift_count == 0:
+        return f"Consistent {name} perspective throughout"
+    elif shift_count <= 2:
+        return f"Primarily {name} with minor perspective shifts"
+    else:
+        return f"Multiple perspective shifts detected - may confuse readers"
