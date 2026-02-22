@@ -136,6 +136,7 @@ async function analyzeText() {
         if (!r.ok) { const e = await r.json(); throw new Error(e.detail || 'Analysis failed'); }
 
         analysisResults = await r.json();
+        mindElixirData = null; // Reset mind map data for new analysis
         console.log('Analysis Results:', analysisResults);
         displayResults();
         showToast('Analysis complete!', 'success');
@@ -215,6 +216,7 @@ function renderTab(tab) {
         case 'grammar':      html = renderGrammar(); break;
         case 'style':        html = renderStyleTone(); break;
         case 'narrative':    html = renderNarrative(); break;
+        case 'mindmap':      html = renderMindMap(); break;
         case 'insights':     html = renderInsights(); break;
         case 'antipatterns': html = renderAntiPatterns(); break;
         case 'improve':      html = renderImprove(); break;
@@ -227,6 +229,7 @@ function renderTab(tab) {
     });
 
     if (tab === 'write')        bindWriteTabEvents();
+    if (tab === 'mindmap')      requestAnimationFrame(() => setTimeout(() => initMindElixir(), 200));
     if (tab === 'insights')     requestAnimationFrame(() => setTimeout(() => initMindMapNetwork(), 200));
     if (tab === 'antipatterns')  setTimeout(() => bindAntiPatternEvents(), 60);
 }
@@ -1061,6 +1064,237 @@ function initMindMapNetwork(retryCount) {
     } catch (err) {
         console.error('[MindMap] Failed to create vis.Network:', err);
     }
+}
+
+
+// ═══════════════════════════════════════════════════════════
+//  TAB 5b — MIND MAP (MindElixir + KeyBERT)
+// ═══════════════════════════════════════════════════════════
+
+let mindElixirInstance = null;
+let mindElixirData = null;
+let mindMapViewMode = 'map'; // 'text' or 'map'
+
+function renderMindMap() {
+    let html = '<div class="animate-fade-in">';
+    
+    // Header with view switcher
+    html += `
+    <div class="me-header">
+        <h3 style="font-size:1.05rem;font-weight:600;display:flex;align-items:center;gap:8px">
+            🧠 KeyBERT Mind Map
+        </h3>
+        <div class="me-tabs">
+            <button class="me-tab ${mindMapViewMode === 'text' ? 'active' : ''}" data-view="text">📝 Text View</button>
+            <button class="me-tab ${mindMapViewMode === 'map' ? 'active' : ''}" data-view="map">🗺️ Mind Map</button>
+        </div>
+    </div>`;
+
+    // Text view panel
+    html += `
+    <div id="me-text-view" class="me-panel" style="display:${mindMapViewMode === 'text' ? 'block' : 'none'}">
+        <div class="wc-card">
+            <div class="wc-card-header"><h3>📄 Source Text</h3></div>
+            <div class="wc-card-body">
+                <div class="me-text-output">${_esc(analysisResults.input?.text || '(no text)')}</div>
+            </div>
+        </div>
+        ${mindElixirData ? `
+        <div class="wc-card mt-md">
+            <div class="wc-card-header"><h3>🏷️ Extracted Keywords</h3><span class="wc-badge wc-badge-primary">${(mindElixirData.meta?.keywords || []).length}</span></div>
+            <div class="wc-card-body" style="display:flex;flex-wrap:wrap;gap:8px">
+                ${(mindElixirData.meta?.keywords || []).map(kw => `<span class="entity-tag entity-KEYWORD">${_esc(kw)}</span>`).join('')}
+            </div>
+        </div>
+        <div class="wc-card mt-md">
+            <div class="wc-card-header"><h3>👤 Named Entities</h3><span class="wc-badge wc-badge-muted">${(mindElixirData.entities || []).length}</span></div>
+            <div class="wc-card-body" style="display:flex;flex-wrap:wrap;gap:8px">
+                ${(mindElixirData.entities || []).map(ent => `<span class="entity-tag entity-ENTITY">${_esc(ent)}</span>`).join('')}
+            </div>
+        </div>` : ''}
+    </div>`;
+
+    // Mind Map view panel
+    html += `
+    <div id="me-map-view" class="me-panel" style="display:${mindMapViewMode === 'map' ? 'flex' : 'none'}">
+        <div id="me-container" class="me-container">
+            <div class="me-loading">
+                <div class="wc-spinner"></div>
+                <p>Building mind map...</p>
+            </div>
+        </div>
+        <div class="me-hint">Drag to pan · Scroll to zoom · Click node to focus</div>
+    </div>`;
+
+    html += '</div>';
+    return html;
+}
+
+function initMindElixir() {
+    // Bind view tab events
+    document.querySelectorAll('.me-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            mindMapViewMode = tab.dataset.view;
+            document.querySelectorAll('.me-tab').forEach(t => t.classList.toggle('active', t.dataset.view === mindMapViewMode));
+            document.getElementById('me-text-view').style.display = mindMapViewMode === 'text' ? 'block' : 'none';
+            document.getElementById('me-map-view').style.display = mindMapViewMode === 'map' ? 'flex' : 'none';
+            if (mindMapViewMode === 'map' && !mindElixirInstance) {
+                buildMindElixirMap();
+            }
+        });
+    });
+
+    // Automatically fetch mind map data if not already fetched
+    if (!mindElixirData) {
+        fetchMindMapData();
+    } else if (mindMapViewMode === 'map') {
+        buildMindElixirMap();
+    }
+}
+
+async function fetchMindMapData() {
+    const text = analysisResults.input?.text;
+    if (!text) return;
+    
+    try {
+        const res = await fetch(`${CONFIG.API_BASE_URL}/mindmap`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, top_n: 8 })
+        });
+        if (!res.ok) throw new Error('Server error');
+        mindElixirData = await res.json();
+        
+        // Re-render to show keywords/entities in text view
+        elements.tabContent.innerHTML = renderMindMap();
+        requestAnimationFrame(() => setTimeout(() => initMindElixir(), 100));
+    } catch (err) {
+        console.error('[MindElixir] Failed to fetch mind map:', err);
+        const container = document.getElementById('me-container');
+        if (container) {
+            container.innerHTML = `<div class="me-error">❌ Failed to generate mind map: ${_esc(err.message)}</div>`;
+        }
+    }
+}
+
+function convertToMindElixirFormat(data) {
+    // Convert hierarchical {topic, children[]} to MindElixir nodeData format
+    let id = 1;
+    function walk(node) {
+        const nid = String(id++);
+        const result = { id: nid, topic: node.topic || '—', children: [] };
+        if (node.children && node.children.length) {
+            for (const child of node.children) {
+                result.children.push(walk(child));
+            }
+        }
+        return result;
+    }
+    return walk(data);
+}
+
+function getMindElixirCtor() {
+    if (typeof window === 'undefined') return null;
+    // Try various export patterns
+    const candidates = [
+        window.MindElixir,
+        window.MindElixir?.default,
+        window.ME,
+        window.ME?.default,
+        typeof MindElixir !== 'undefined' ? MindElixir : null,
+    ];
+    for (const c of candidates) {
+        if (c && typeof c === 'function') return c;
+    }
+    return null;
+}
+
+function buildMindElixirMap() {
+    if (!mindElixirData) return;
+    
+    const container = document.getElementById('me-container');
+    if (!container) return;
+    
+    // Clear loading
+    container.innerHTML = '';
+    
+    // Check MindElixir is available
+    const MindElixirCtor = getMindElixirCtor();
+    if (!MindElixirCtor) {
+        // Fallback: render as a simple tree view
+        console.warn('[MindElixir] Library not available, using tree fallback');
+        renderTreeFallback(container, mindElixirData);
+        return;
+    }
+    
+    // Destroy previous instance
+    if (mindElixirInstance) {
+        try { mindElixirInstance.destroy(); } catch (e) {}
+        mindElixirInstance = null;
+    }
+    
+    // Convert data to MindElixir format
+    const meData = convertToMindElixirFormat(mindElixirData);
+    
+    try {
+        mindElixirInstance = new MindElixirCtor({
+            el: container,
+            direction: MindElixirCtor.SIDE || 2, // 2 = SIDE (both sides)
+            draggable: true,
+            contextMenu: false,
+            toolBar: false,
+            nodeMenu: false,
+            keypress: false,
+            editable: false,
+            locale: 'en',
+            overflowHidden: false,
+            primaryLinkStyle: 2,
+            primaryNodeVerticalGap: 25,
+            primaryNodeHorizontalGap: 65,
+        });
+        
+        mindElixirInstance.init({ nodeData: meData });
+        
+        // Center after short delay
+        setTimeout(() => {
+            try {
+                if (mindElixirInstance && mindElixirInstance.toCenter) {
+                    mindElixirInstance.toCenter();
+                }
+            } catch (e) {}
+        }, 300);
+        
+        console.info('[MindElixir] Mind map rendered successfully');
+    } catch (err) {
+        console.error('[MindElixir] Failed to render:', err);
+        // Fallback to tree view on error
+        renderTreeFallback(container, mindElixirData);
+    }
+}
+
+// Fallback tree visualization when MindElixir isn't available
+function renderTreeFallback(container, data) {
+    function buildTree(node, depth = 0) {
+        const hasChildren = node.children && node.children.length > 0;
+        const indent = depth * 24;
+        let html = `<div class="tree-node" style="padding-left:${indent}px">
+            <span class="tree-icon">${depth === 0 ? '🧠' : (hasChildren ? '📂' : '📄')}</span>
+            <span class="tree-topic">${_esc(node.topic || '—')}</span>
+        </div>`;
+        if (hasChildren) {
+            for (const child of node.children) {
+                html += buildTree(child, depth + 1);
+            }
+        }
+        return html;
+    }
+    
+    container.innerHTML = `
+        <div class="tree-fallback">
+            <div class="tree-header">🌳 Mind Map (Tree View)</div>
+            <div class="tree-content">${buildTree(data)}</div>
+        </div>
+    `;
 }
 
 

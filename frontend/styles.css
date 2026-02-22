@@ -803,6 +803,102 @@ select, input { font-family: inherit; }
 .entity-ORG, .entity-org       { background: #D1FAE5; color: #065F46; }
 .entity-GPE, .entity-gpe, .entity-LOC, .entity-loc { background: #FEF3C7; color: #92400E; }
 .entity-DATE, .entity-date, .entity-TIME, .entity-time { background: #E0E7FF; color: #3730A3; }
+.entity-KEYWORD, .entity-keyword { background: #C7D2FE; color: #4338CA; }
+.entity-ENTITY, .entity-entity { background: #FED7AA; color: #9A3412; }
+
+/* ── MindElixir Mind Map ──────────────────────────────── */
+.me-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+.me-tabs {
+    display: flex;
+    gap: 8px;
+}
+.me-tab {
+    padding: 8px 16px;
+    border-radius: var(--wc-radius-sm);
+    border: 1px solid var(--wc-border);
+    background: var(--wc-surface);
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--wc-text-secondary);
+    transition: all var(--wc-transition);
+}
+.me-tab:hover {
+    background: var(--wc-surface-alt);
+    color: var(--wc-text);
+}
+.me-tab.active {
+    background: var(--wc-primary);
+    color: white;
+    border-color: var(--wc-primary);
+}
+.me-panel {
+    background: var(--wc-surface);
+    border-radius: var(--wc-radius);
+    border: 1px solid var(--wc-border);
+    overflow: hidden;
+}
+#me-map-view {
+    flex-direction: column;
+    min-height: 520px;
+}
+.me-container {
+    flex: 1;
+    min-height: 480px;
+    background: #FAFBFC;
+    position: relative;
+    overflow: hidden;
+}
+.me-container .me-loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    color: var(--wc-text-muted);
+}
+.me-container .me-error {
+    padding: 24px;
+    text-align: center;
+    color: var(--wc-error);
+}
+.me-hint {
+    padding: 10px 16px;
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--wc-text-muted);
+    background: var(--wc-surface-alt);
+    border-top: 1px solid var(--wc-border-light);
+}
+.me-text-output {
+    white-space: pre-wrap;
+    font-size: 0.9rem;
+    line-height: 1.7;
+    color: var(--wc-text-secondary);
+    max-height: 200px;
+    overflow-y: auto;
+}
+/* MindElixir overrides for theme consistency */
+.mind-elixir .node-menu, .mind-elixir .context-menu {
+    display: none !important;
+}
+.mind-elixir .box {
+    background: var(--wc-primary) !important;
+    color: white !important;
+    border-radius: var(--wc-radius-sm) !important;
+}
+.mind-elixir .box.selected {
+    box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.3) !important;
+}
 
 /* ── Responsive ───────────────────────────────────────── */
 @media (max-width: 1024px) {
@@ -847,4 +943,41 @@ select, input { font-family: inherit; }
 @media print {
     .wc-topbar, .wc-source, .wc-score-strip, .wc-tabs, .wc-drawer, .wc-loading, .wc-toasts { display: none !important; }
     .wc-tab-content { overflow: visible; max-height: none; }
+}
+/* ── Tree Fallback (MindElixir fallback) ──────────────── */
+.tree-fallback {
+    padding: 16px;
+    background: var(--wc-surface-alt);
+    border-radius: var(--wc-radius);
+    height: 100%;
+    overflow: auto;
+}
+.tree-header {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--wc-text-secondary);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--wc-border);
+}
+.tree-content {
+    font-size: 0.88rem;
+}
+.tree-node {
+    padding: 6px 8px;
+    border-radius: 6px;
+    transition: background 0.15s;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+.tree-node:hover {
+    background: var(--wc-primary-light);
+}
+.tree-icon {
+    flex-shrink: 0;
+}
+.tree-topic {
+    color: var(--wc-text);
+    line-height: 1.4;
 }
