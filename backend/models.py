@@ -242,3 +242,160 @@ class LLMStatusResponse(BaseModel):
     response_time_ms: Optional[float] = Field(default=None, description="API response time in milliseconds")
     error: Optional[str] = Field(default=None, description="Error message if status is error")
     hint: Optional[str] = Field(default=None, description="Helpful hint for resolving issues")
+
+
+# ==================== LLM Enhancement Models ====================
+
+class IssueTypeEnum(str, Enum):
+    """Types of writing issues that can be enhanced by LLM"""
+    GRAMMAR_ERROR = "grammar_error"
+    PASSIVE_VOICE = "passive_voice"
+    SUBJECT_VERB_AGREEMENT = "subject_verb_agreement"
+    SENTENCE_FRAGMENT = "sentence_fragment"
+    RUN_ON_SENTENCE = "run_on_sentence"
+    WORDY_SENTENCE = "wordy_sentence"
+    WEAK_OPENING = "weak_opening"
+    CLICHE = "cliche"
+    REPEATED_WORD = "repeated_word"
+    LONG_SENTENCE = "long_sentence"
+    SHOW_DONT_TELL = "show_dont_tell"
+    ADVERB_OVERUSE = "adverb_overuse"
+    HEDGE_WORDS = "hedge_words"
+    NOMINALIZATION = "nominalization"
+    GENERAL = "general"
+
+
+class RewriteRequest(BaseModel):
+    """Request model for LLM rewrite enhancement"""
+    text: str = Field(..., min_length=1, max_length=2000, description="Text to enhance")
+    issue_type: IssueTypeEnum = Field(
+        default=IssueTypeEnum.GENERAL,
+        description="Type of writing issue to fix"
+    )
+    context: Optional[str] = Field(
+        default="",
+        max_length=1000,
+        description="Surrounding text for better context"
+    )
+    word: Optional[str] = Field(
+        default="",
+        max_length=100,
+        description="Specific word to address (for repeated word, adverb issues)"
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "text": "The ball was thrown by the boy.",
+                "issue_type": "passive_voice",
+                "context": "The children were playing in the park.",
+                "word": ""
+            }
+        }
+
+
+class RewriteResponse(BaseModel):
+    """Response model for LLM rewrite enhancement"""
+    success: bool = Field(..., description="Whether enhancement was successful")
+    original: str = Field(..., description="Original text")
+    suggestion: str = Field(default="", description="Enhanced text suggestion")
+    explanation: str = Field(default="", description="Explanation of the improvement")
+    issue_type: str = Field(..., description="Type of issue that was addressed")
+    confidence: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Confidence score of the suggestion (0.0-1.0)"
+    )
+    generation_time_ms: float = Field(default=0.0, description="LLM generation time in milliseconds")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+
+
+class BatchRewriteRequest(BaseModel):
+    """Request model for batch LLM rewrite enhancement"""
+    issues: List[Dict[str, Any]] = Field(
+        ...,
+        min_length=1,
+        max_length=5,
+        description="List of issues to enhance (max 5)"
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "issues": [
+                    {"text": "The door was opened by him.", "issue_type": "passive_voice"},
+                    {"text": "She ran really fast.", "issue_type": "adverb_overuse", "word": "really fast"}
+                ]
+            }
+        }
+
+
+class BatchRewriteResponse(BaseModel):
+    """Response model for batch LLM rewrite enhancement"""
+    success: bool = Field(..., description="Whether batch processing was successful")
+    results: List[RewriteResponse] = Field(..., description="List of enhancement results")
+    total_time_ms: float = Field(default=0.0, description="Total processing time")
+
+
+class StyleTypeEnum(str, Enum):
+    """Available style types for LLM transformation"""
+    FORMAL = "formal"
+    CASUAL = "casual"
+    ACADEMIC = "academic"
+    CREATIVE = "creative"
+    PERSUASIVE = "persuasive"
+    JOURNALISTIC = "journalistic"
+    NARRATIVE = "narrative"
+
+
+class TransformModeEnum(str, Enum):
+    """Transform mode - quick (rule-based) or deep (LLM)"""
+    QUICK = "quick"
+    DEEP = "deep"
+
+
+class StyleTransformRequest(BaseModel):
+    """Request model for LLM style transformation"""
+    text: str = Field(..., min_length=1, max_length=5000, description="Text to transform")
+    target_style: StyleTypeEnum = Field(
+        default=StyleTypeEnum.FORMAL,
+        description="Target style to transform to"
+    )
+    source_style: Optional[str] = Field(
+        default="auto",
+        description="Source style hint (optional)"
+    )
+    mode: TransformModeEnum = Field(
+        default=TransformModeEnum.DEEP,
+        description="Transform mode: 'quick' (rule-based) or 'deep' (LLM)"
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "text": "Hey, gonna tell you about this awesome thing I found!",
+                "target_style": "formal",
+                "source_style": "auto",
+                "mode": "deep"
+            }
+        }
+
+
+class StyleTransformResponse(BaseModel):
+    """Response model for LLM style transformation"""
+    success: bool = Field(..., description="Whether transformation was successful")
+    original: str = Field(..., description="Original text")
+    transformed: str = Field(default="", description="Transformed text")
+    source_style: str = Field(..., description="Detected or provided source style")
+    target_style: str = Field(..., description="Target style")
+    mode: str = Field(..., description="Mode used: quick or deep")
+    changes_summary: str = Field(default="", description="Summary of style changes")
+    confidence: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Confidence score (0.0-1.0)"
+    )
+    generation_time_ms: float = Field(default=0.0, description="Processing time in ms")
+    error: Optional[str] = Field(default=None, description="Error message if failed")

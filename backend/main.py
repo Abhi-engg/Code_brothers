@@ -24,14 +24,21 @@ from backend.models import (
     ErrorResponse,
     HealthResponse,
     LLMStatusResponse,
-    TargetStyle
+    TargetStyle,
+    RewriteRequest,
+    RewriteResponse,
+    BatchRewriteRequest,
+    BatchRewriteResponse,
+    StyleTransformRequest,
+    StyleTransformResponse
 )
 
 # Import the NLP engine
 from nlp_engine import WritingAssistant, analyze_text, NarrativeConsistencyAnalyzer
 
-# Import LLM client
+# Import LLM client and enhancer
 from nlp_engine.llm_client import get_client as get_llm_client, check_ollama_status
+from nlp_engine.llm_enhancer import get_enhancer as get_llm_enhancer
 
 # Global instances (loaded once)
 assistant: Optional[WritingAssistant] = None
@@ -470,6 +477,180 @@ async def create_mindmap(req: MindMapRequest):
         "entities": entities,
         "meta": {"keywords": keywords}
     }
+
+
+# ==================== LLM Enhancement Endpoints ====================
+
+@app.post("/enhance/rewrite", response_model=RewriteResponse, tags=["LLM Enhancement"])
+async def enhance_rewrite(request: RewriteRequest):
+    """
+    Generate an LLM-enhanced rewrite for a writing issue.
+    
+    This endpoint uses the local LLM (Ollama) to generate intelligent
+    rewrite suggestions for various writing issues like:
+    - Passive voice → Active voice
+    - Show don't tell → Descriptive writing
+    - Wordy sentences → Concise versions
+    - And more...
+    
+    The core detection logic is rule-based (custom-built).
+    The LLM is used only for natural language generation of suggestions.
+    """
+    try:
+        enhancer = get_llm_enhancer()
+        result = await enhancer.generate_rewrite_async(
+            text=request.text,
+            issue_type=request.issue_type.value,
+            context=request.context or "",
+            word=request.word or ""
+        )
+        
+        return RewriteResponse(
+            success=result.success,
+            original=result.original,
+            suggestion=result.suggestion,
+            explanation=result.explanation,
+            issue_type=result.issue_type,
+            confidence=result.confidence,
+            generation_time_ms=result.generation_time_ms,
+            error=result.error
+        )
+        
+    except Exception as e:
+        return RewriteResponse(
+            success=False,
+            original=request.text,
+            suggestion="",
+            explanation="",
+            issue_type=request.issue_type.value,
+            confidence=0.0,
+            error=str(e)
+        )
+
+
+@app.post("/enhance/batch", response_model=BatchRewriteResponse, tags=["LLM Enhancement"])
+async def enhance_batch(request: BatchRewriteRequest):
+    """
+    Generate LLM-enhanced rewrites for multiple issues in a single call.
+    
+    More efficient than calling /enhance/rewrite multiple times.
+    Maximum 5 issues per batch.
+    """
+    import time
+    start_time = time.time()
+    
+    try:
+        enhancer = get_llm_enhancer()
+        results = enhancer.generate_batch_rewrites(request.issues)
+        
+        response_results = [
+            RewriteResponse(
+                success=r.success,
+                original=r.original,
+                suggestion=r.suggestion,
+                explanation=r.explanation,
+                issue_type=r.issue_type,
+                confidence=r.confidence,
+                generation_time_ms=r.generation_time_ms,
+                error=r.error
+            )
+            for r in results
+        ]
+        
+        total_time = (time.time() - start_time) * 1000
+        
+        return BatchRewriteResponse(
+            success=True,
+            results=response_results,
+            total_time_ms=total_time
+        )
+        
+    except Exception as e:
+        return BatchRewriteResponse(
+            success=False,
+            results=[],
+            total_time_ms=0.0
+        )
+
+
+@app.post("/transform/style", response_model=StyleTransformResponse, tags=["LLM Enhancement"])
+async def transform_style_endpoint(request: StyleTransformRequest):
+    """
+    Transform text to a different writing style.
+    
+    Two modes available:
+    - **quick**: Rule-based transformation (instant, deterministic)
+    - **deep**: LLM-powered transformation (2-5s, more natural)
+    
+    Available styles:
+    - formal: Professional, business-appropriate language
+    - casual: Conversational, friendly tone
+    - academic: Scholarly, objective, hedged language
+    - creative: Vivid, artistic expression
+    - persuasive: Compelling, motivating language
+    - journalistic: Objective, concise reporting
+    - narrative: Storytelling prose
+    
+    The core style detection logic is custom-built.
+    LLM is used only for natural sentence generation in deep mode.
+    """
+    import time
+    start_time = time.time()
+    
+    try:
+        if request.mode.value == "quick":
+            # Use rule-based transformer
+            from nlp_engine.style_transformer import transform_style
+            result = transform_style(request.text, request.target_style.value)
+            
+            total_time = (time.time() - start_time) * 1000
+            
+            return StyleTransformResponse(
+                success=True,
+                original=result.get("original", request.text),
+                transformed=result.get("transformed", ""),
+                source_style=request.source_style or "auto",
+                target_style=request.target_style.value,
+                mode="quick",
+                changes_summary=f"{result.get('change_count', 0)} rule-based changes applied",
+                confidence=0.9 if result.get("transformed") else 0.5,
+                generation_time_ms=total_time,
+                error=result.get("error")
+            )
+        else:
+            # Use LLM-powered deep transform
+            enhancer = get_llm_enhancer()
+            result = await enhancer.transform_style_async(
+                text=request.text,
+                target_style=request.target_style.value,
+                source_style=request.source_style or "auto"
+            )
+            
+            return StyleTransformResponse(
+                success=result.success,
+                original=result.original,
+                transformed=result.transformed,
+                source_style=result.source_style,
+                target_style=result.target_style,
+                mode="deep",
+                changes_summary=result.changes_summary,
+                confidence=result.confidence,
+                generation_time_ms=result.generation_time_ms,
+                error=result.error
+            )
+            
+    except Exception as e:
+        return StyleTransformResponse(
+            success=False,
+            original=request.text,
+            transformed="",
+            source_style=request.source_style or "auto",
+            target_style=request.target_style.value,
+            mode=request.mode.value,
+            changes_summary="",
+            confidence=0.0,
+            error=str(e)
+        )
 
 
 @app.exception_handler(Exception)
