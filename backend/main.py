@@ -23,11 +23,15 @@ from backend.models import (
     TransformResponse,
     ErrorResponse,
     HealthResponse,
+    LLMStatusResponse,
     TargetStyle
 )
 
 # Import the NLP engine
 from nlp_engine import WritingAssistant, analyze_text, NarrativeConsistencyAnalyzer
+
+# Import LLM client
+from nlp_engine.llm_client import get_client as get_llm_client, check_ollama_status
 
 # Global instances (loaded once)
 assistant: Optional[WritingAssistant] = None
@@ -113,6 +117,40 @@ async def health_check():
             "consistency_checking",
             "explanations"
         ]
+    )
+
+
+@app.get("/llm/status", response_model=LLMStatusResponse, tags=["LLM"])
+async def llm_status():
+    """
+    Check LLM (Ollama) status and availability.
+    
+    Returns information about:
+    - Connection status to Ollama server
+    - Configured model availability
+    - Model details (size, parameters, quantization)
+    - Response time
+    
+    If status is not 'ok', check the 'error' and 'hint' fields for troubleshooting.
+    """
+    status = check_ollama_status()
+    
+    # Convert model_info dict to LLMModelInfo if present
+    model_info = None
+    if status.get("model_info"):
+        from backend.models import LLMModelInfo
+        model_info = LLMModelInfo(**status["model_info"])
+    
+    return LLMStatusResponse(
+        status=status.get("status", "error"),
+        connected=status.get("connected", False),
+        model=status.get("model", "llama3.1:8b"),
+        model_available=status.get("model_available", False),
+        model_info=model_info,
+        available_models=status.get("available_models"),
+        response_time_ms=status.get("response_time_ms"),
+        error=status.get("error"),
+        hint=status.get("hint")
     )
 
 

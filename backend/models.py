@@ -221,3 +221,24 @@ class HealthResponse(BaseModel):
     version: str
     nlp_model: str
     features: List[str]
+
+
+class LLMModelInfo(BaseModel):
+    """LLM model information"""
+    name: str
+    size_gb: float
+    parameter_size: str
+    quantization: str
+
+
+class LLMStatusResponse(BaseModel):
+    """LLM status response"""
+    status: str = Field(..., description="Status: ok, model_not_found, or error")
+    connected: bool = Field(..., description="Whether Ollama server is reachable")
+    model: str = Field(..., description="Configured model name")
+    model_available: bool = Field(default=False, description="Whether the model is loaded")
+    model_info: Optional[LLMModelInfo] = Field(default=None, description="Model details if available")
+    available_models: Optional[List[str]] = Field(default=None, description="List of available models")
+    response_time_ms: Optional[float] = Field(default=None, description="API response time in milliseconds")
+    error: Optional[str] = Field(default=None, description="Error message if status is error")
+    hint: Optional[str] = Field(default=None, description="Helpful hint for resolving issues")
