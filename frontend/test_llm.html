@@ -1,0 +1,1437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Enhancement Test Page</title>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --surface-light: #334155;
+            --text: #f1f5f9;
+            --text-muted: #94a3b8;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+            color: var(--primary);
+        }
+        
+        .subtitle {
+            color: var(--text-muted);
+            margin-bottom: 2rem;
+        }
+        
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            background: var(--surface);
+            border-radius: 8px;
+            margin-bottom: 2rem;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--text-muted);
+        }
+        
+        .status-indicator.connected {
+            background: var(--success);
+            box-shadow: 0 0 8px var(--success);
+        }
+        
+        .status-indicator.error {
+            background: var(--error);
+        }
+        
+        .status-text {
+            flex: 1;
+        }
+        
+        .model-info {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+        
+        @media (max-width: 900px) {
+            .grid { grid-template-columns: 1fr; }
+        }
+        
+        .card {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+        
+        .card h2 {
+            font-size: 1.25rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+        
+        textarea, input, select {
+            width: 100%;
+            padding: 0.75rem;
+            background: var(--surface-light);
+            border: 1px solid transparent;
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 1rem;
+            font-family: inherit;
+        }
+        
+        textarea:focus, input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+        
+        textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+        
+        select {
+            cursor: pointer;
+        }
+        
+        button {
+            padding: 0.75rem 1.5rem;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        button:hover {
+            background: var(--primary-dark);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .btn-secondary {
+            background: var(--surface-light);
+        }
+        
+        .btn-copy {
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+        }
+        
+        .result-box {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: var(--bg);
+            border-radius: 8px;
+            border-left: 4px solid var(--primary);
+        }
+        
+        .result-box.success {
+            border-left-color: var(--success);
+        }
+        
+        .result-box.error {
+            border-left-color: var(--error);
+        }
+        
+        .result-label {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+        }
+        
+        .result-text {
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+        
+        .result-meta {
+            display: flex;
+            gap: 1rem;
+            margin-top: 0.75rem;
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+        
+        .confidence-bar {
+            height: 4px;
+            background: var(--surface-light);
+            border-radius: 2px;
+            margin-top: 0.5rem;
+            overflow: hidden;
+        }
+        
+        .confidence-fill {
+            height: 100%;
+            background: var(--success);
+            transition: width 0.3s;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--surface-light);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-left: 0.5rem;
+            vertical-align: middle;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .hidden { display: none; }
+        
+        .examples {
+            margin-top: 1.5rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--surface-light);
+        }
+        
+        .examples h3 {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+        }
+        
+        .example-btn {
+            padding: 0.5rem 0.75rem;
+            font-size: 0.875rem;
+            margin: 0.25rem;
+            background: var(--bg);
+        }
+        
+        .batch-item {
+            background: var(--bg);
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 0.75rem;
+        }
+        
+        .batch-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+        
+        .batch-item-number {
+            background: var(--primary);
+            color: white;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+        
+        .remove-btn {
+            background: var(--error);
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+        }
+        
+        .add-btn {
+            width: 100%;
+            background: var(--bg);
+            border: 2px dashed var(--surface-light);
+            margin-top: 0.5rem;
+        }
+        
+        .log-container {
+            margin-top: 2rem;
+            padding: 1rem;
+            background: var(--surface);
+            border-radius: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.875rem;
+        }
+        
+        .log-entry {
+            padding: 0.25rem 0;
+            border-bottom: 1px solid var(--surface-light);
+        }
+        
+        .log-time {
+            color: var(--text-muted);
+            margin-right: 0.5rem;
+        }
+        
+        .actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 LLM Enhancement Test Page</h1>
+        <p class="subtitle">Test Ollama LLM integration for writing improvements (Phases 2-4)</p>
+        
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <div class="status-indicator" id="statusIndicator"></div>
+            <div class="status-text">
+                <div id="statusText">Checking LLM status...</div>
+                <div class="model-info" id="modelInfo"></div>
+            </div>
+            <button onclick="checkStatus()" class="btn-secondary">Refresh Status</button>
+        </div>
+        
+        <div class="grid">
+            <!-- Single Enhancement Test -->
+            <div class="card">
+                <h2>✨ Single Enhancement</h2>
+                
+                <div class="form-group">
+                    <label for="issueType">Issue Type</label>
+                    <select id="issueType">
+                        <option value="passive_voice">Passive Voice → Active Voice</option>
+                        <option value="show_dont_tell">Show Don't Tell</option>
+                        <option value="wordy_sentence">Wordy Sentence</option>
+                        <option value="adverb_overuse">Adverb Overuse</option>
+                        <option value="hedge_words">Hedge Words</option>
+                        <option value="weak_opening">Weak Opening</option>
+                        <option value="cliche">Cliché</option>
+                        <option value="long_sentence">Long Sentence</option>
+                        <option value="nominalization">Nominalization</option>
+                        <option value="grammar_error">Grammar Error</option>
+                        <option value="general">General Improvement</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="inputText">Text to Enhance</label>
+                    <textarea id="inputText" placeholder="Enter text with a writing issue...">The ball was thrown by the boy.</textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="contextText">Context (optional)</label>
+                    <input type="text" id="contextText" placeholder="Surrounding text for better context...">
+                </div>
+                
+                <div class="form-group">
+                    <label for="wordText">Specific Word (for adverb/repeated word)</label>
+                    <input type="text" id="wordText" placeholder="e.g., 'very quickly'">
+                </div>
+                
+                <button onclick="enhanceSingle()" id="enhanceBtn">
+                    <span id="enhanceBtnText">Enhance with LLM</span>
+                    <span class="loading hidden" id="enhanceLoading"></span>
+                </button>
+                
+                <!-- Results -->
+                <div id="singleResult" class="hidden">
+                    <div class="result-box" id="singleResultBox">
+                        <div class="result-label">Original</div>
+                        <div class="result-text" id="originalText"></div>
+                        
+                        <div class="result-label" style="margin-top: 1rem;">LLM Suggestion</div>
+                        <div class="result-text" id="suggestionText"></div>
+                        
+                        <div class="result-label" style="margin-top: 0.5rem;">Explanation</div>
+                        <div class="result-text" id="explanationText" style="font-size: 0.875rem; color: var(--text-muted);"></div>
+                        
+                        <div class="result-meta">
+                            <span>Confidence: <span id="confidenceValue">0%</span></span>
+                            <span>Time: <span id="timeValue">0ms</span></span>
+                        </div>
+                        <div class="confidence-bar">
+                            <div class="confidence-fill" id="confidenceFill" style="width: 0%;"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="actions">
+                        <button onclick="copySuggestion()" class="btn-copy btn-secondary">Copy Suggestion</button>
+                        <button onclick="useSuggestion()" class="btn-copy">Use as New Input</button>
+                    </div>
+                </div>
+                
+                <!-- Example Buttons -->
+                <div class="examples">
+                    <h3>Quick Examples</h3>
+                    <button class="example-btn" onclick="loadExample('passive')">Passive Voice</button>
+                    <button class="example-btn" onclick="loadExample('showdont')">Show Don't Tell</button>
+                    <button class="example-btn" onclick="loadExample('wordy')">Wordy</button>
+                    <button class="example-btn" onclick="loadExample('adverb')">Adverb</button>
+                    <button class="example-btn" onclick="loadExample('hedge')">Hedge Words</button>
+                </div>
+            </div>
+            
+            <!-- Batch Enhancement Test -->
+            <div class="card">
+                <h2>📦 Batch Enhancement</h2>
+                <p style="color: var(--text-muted); margin-bottom: 1rem; font-size: 0.875rem;">
+                    Test multiple issues in a single LLM call (more efficient)
+                </p>
+                
+                <div id="batchItems">
+                    <!-- Batch items will be added here -->
+                </div>
+                
+                <button class="add-btn" onclick="addBatchItem()">+ Add Issue (max 5)</button>
+                
+                <div style="margin-top: 1rem;">
+                    <button onclick="enhanceBatch()" id="batchBtn">
+                        <span id="batchBtnText">Enhance All</span>
+                        <span class="loading hidden" id="batchLoading"></span>
+                    </button>
+                    <button onclick="clearBatch()" class="btn-secondary">Clear All</button>
+                </div>
+                
+                <!-- Batch Results -->
+                <div id="batchResults" class="hidden">
+                    <div class="result-label" style="margin-top: 1rem;">Batch Results</div>
+                    <div id="batchResultsList"></div>
+                    <div class="result-meta">
+                        <span>Total Time: <span id="batchTimeValue">0ms</span></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Style Transformation Section (Full Width) -->
+        <div class="card" style="margin-top: 2rem;">
+            <h2>🎨 Style Transformation</h2>
+            <p style="color: var(--text-muted); margin-bottom: 1rem; font-size: 0.875rem;">
+                Transform text between different writing styles (Phase 3)
+            </p>
+            
+            <div class="grid">
+                <!-- Input Side -->
+                <div>
+                    <div class="form-group">
+                        <label for="styleText">Text to Transform</label>
+                        <textarea id="styleText" rows="5" placeholder="Enter text to transform...">Hey, gonna tell you about this awesome thing I found! It's like, super cool and everyone should totally check it out. You won't believe how amazing it is!</textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="targetStyle">Target Style</label>
+                        <select id="targetStyle">
+                            <option value="formal">Formal (Professional)</option>
+                            <option value="casual">Casual (Conversational)</option>
+                            <option value="academic">Academic (Scholarly)</option>
+                            <option value="creative">Creative (Literary)</option>
+                            <option value="persuasive">Persuasive (Compelling)</option>
+                            <option value="journalistic">Journalistic (Reporting)</option>
+                            <option value="narrative">Narrative (Storytelling)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Transform Mode</label>
+                        <div style="display: flex; gap: 1rem; margin-top: 0.5rem;">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="radio" name="transformMode" value="quick"> 
+                                <span>Quick (Rule-based, instant)</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="radio" name="transformMode" value="deep" checked> 
+                                <span>Deep (LLM, more natural)</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <button onclick="transformStyle()" id="transformBtn">
+                        <span id="transformBtnText">Transform Style</span>
+                        <span class="loading hidden" id="transformLoading"></span>
+                    </button>
+                </div>
+                
+                <!-- Output Side -->
+                <div>
+                    <div id="styleResult" class="hidden">
+                        <div class="result-box" id="styleResultBox">
+                            <div class="result-label">Transformed Text</div>
+                            <div class="result-text" id="transformedText" style="white-space: pre-wrap;"></div>
+                            
+                            <div class="result-meta" style="margin-top: 1rem;">
+                                <span>Mode: <span id="styleModeValue">-</span></span>
+                                <span>Style: <span id="styleTargetValue">-</span></span>
+                                <span>Confidence: <span id="styleConfidenceValue">0%</span></span>
+                                <span>Time: <span id="styleTimeValue">0ms</span></span>
+                            </div>
+                            <div class="confidence-bar">
+                                <div class="confidence-fill" id="styleConfidenceFill" style="width: 0%;"></div>
+                            </div>
+                            
+                            <div style="margin-top: 0.75rem; font-size: 0.875rem; color: var(--text-muted);">
+                                <span id="styleChangesSummary"></span>
+                            </div>
+                        </div>
+                        
+                        <div class="actions">
+                            <button onclick="copyTransformed()" class="btn-copy btn-secondary">Copy Result</button>
+                            <button onclick="useTransformed()" class="btn-copy">Use as New Input</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Style Examples -->
+                    <div style="margin-top: 1rem;">
+                        <div style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.5rem;">Quick Examples:</div>
+                        <button class="example-btn" onclick="loadStyleExample('informal')">Informal → Formal</button>
+                        <button class="example-btn" onclick="loadStyleExample('technical')">Technical → Casual</button>
+                        <button class="example-btn" onclick="loadStyleExample('plain')">Plain → Creative</button>
+                        <button class="example-btn" onclick="loadStyleExample('news')">News → Narrative</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Story Continuation Section (Phase 4) -->
+        <div class="card" style="margin-top: 2rem;">
+            <h2>📖 Story Continuation</h2>
+            <p style="color: var(--text-muted); margin-bottom: 1rem; font-size: 0.875rem;">
+                Continue your story with AI that matches your writing style, POV, and tone (Phase 4)
+            </p>
+            
+            <div class="grid">
+                <!-- Input Side -->
+                <div>
+                    <div class="form-group">
+                        <label for="storyText">Story Text</label>
+                        <textarea id="storyText" rows="8" placeholder="Enter your story text...">The old lighthouse keeper had seen many storms, but none like this. The waves crashed against the rocks with a fury that made the tower shudder. Sarah gripped the railing, her knuckles white. 
+
+"We need to get to higher ground," she said, but her voice was lost in the howling wind.
+
+Marcus nodded, understanding without hearing. He grabbed the emergency kit and pointed toward the upper level. They had maybe ten minutes before the surge hit.</textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="wordTarget">Word Target</label>
+                        <input type="number" id="wordTarget" value="150" min="50" max="500" step="25">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="customInstruction">Direction (optional)</label>
+                        <input type="text" id="customInstruction" placeholder="e.g., 'Build tension' or 'Introduce a twist'">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Mode</label>
+                        <div style="display: flex; gap: 1rem; margin-top: 0.5rem;">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="radio" name="storyMode" value="normal" checked> 
+                                <span>Normal (Complete response)</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="radio" name="storyMode" value="stream"> 
+                                <span>Stream (Real-time tokens)</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button onclick="analyzeStory()" id="analyzeBtn" class="btn-secondary">
+                            <span id="analyzeBtnText">Analyze</span>
+                            <span class="loading hidden" id="analyzeLoading"></span>
+                        </button>
+                        <button onclick="continueStory()" id="continueBtn">
+                            <span id="continueBtnText">Continue Story</span>
+                            <span class="loading hidden" id="continueLoading"></span>
+                        </button>
+                        <button onclick="generateOptions()" id="optionsBtn" class="btn-secondary">
+                            <span id="optionsBtnText">Get Options</span>
+                            <span class="loading hidden" id="optionsLoading"></span>
+                        </button>
+                    </div>
+                    
+                    <!-- Story Analysis Result -->
+                    <div id="storyAnalysis" class="hidden" style="margin-top: 1rem;">
+                        <div class="result-box">
+                            <div class="result-label">Story Analysis</div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.5rem;">
+                                <div><strong>POV:</strong> <span id="analysisPov">-</span></div>
+                                <div><strong>Tense:</strong> <span id="analysisTense">-</span></div>
+                                <div><strong>Tone:</strong> <span id="analysisTone">-</span></div>
+                                <div><strong>Genre:</strong> <span id="analysisGenre">-</span></div>
+                            </div>
+                            <div style="margin-top: 0.5rem;">
+                                <strong>Characters:</strong> <span id="analysisCharacters">-</span>
+                            </div>
+                            <div style="margin-top: 0.25rem;">
+                                <strong>Themes:</strong> <span id="analysisThemes">-</span>
+                            </div>
+                            <div style="margin-top: 0.25rem;">
+                                <strong>Setting:</strong> <span id="analysisSetting">-</span>
+                            </div>
+                            <div style="margin-top: 0.25rem; font-size: 0.875rem; color: var(--text-muted);">
+                                <span id="analysisWordCount">0</span> words, <span id="analysisPlotElements">0</span> plot elements
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Output Side -->
+                <div>
+                    <!-- Continuation Result -->
+                    <div id="storyResult" class="hidden">
+                        <div class="result-box" id="storyResultBox">
+                            <div class="result-label">Continuation</div>
+                            <div class="result-text" id="continuationText" style="white-space: pre-wrap; min-height: 100px;"></div>
+                            
+                            <div class="result-meta" style="margin-top: 1rem;">
+                                <span>POV: <span id="resultPov">-</span></span>
+                                <span>Tense: <span id="resultTense">-</span></span>
+                                <span>Tone: <span id="resultTone">-</span></span>
+                            </div>
+                            <div class="result-meta">
+                                <span>Tokens: <span id="resultTokens">0</span></span>
+                                <span>Time: <span id="resultTime">0ms</span></span>
+                            </div>
+                        </div>
+                        
+                        <div class="actions">
+                            <button onclick="copyContinuation()" class="btn-copy btn-secondary">Copy</button>
+                            <button onclick="appendToStory()" class="btn-copy">Append to Story</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Options Result -->
+                    <div id="optionsResult" class="hidden" style="margin-top: 1rem;">
+                        <div class="result-label">Continuation Options</div>
+                        <div id="optionsList"></div>
+                    </div>
+                    
+                    <!-- Story Examples -->
+                    <div style="margin-top: 1rem;">
+                        <div style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.5rem;">Quick Examples:</div>
+                        <button class="example-btn" onclick="loadStoryExample('fantasy')">Fantasy</button>
+                        <button class="example-btn" onclick="loadStoryExample('thriller')">Thriller</button>
+                        <button class="example-btn" onclick="loadStoryExample('romance')">Romance</button>
+                        <button class="example-btn" onclick="loadStoryExample('scifi')">Sci-Fi</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Log/Debug -->
+        <div class="log-container">
+            <div style="color: var(--text-muted); margin-bottom: 0.5rem;">📋 Activity Log</div>
+            <div id="logEntries"></div>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        let batchCount = 0;
+        
+        // Examples data
+        const EXAMPLES = {
+            passive: {
+                type: 'passive_voice',
+                text: 'The cake was eaten by the children at the party.',
+                context: 'It was a birthday celebration.',
+                word: ''
+            },
+            showdont: {
+                type: 'show_dont_tell',
+                text: 'She was very angry.',
+                context: 'Her colleague had taken credit for her work.',
+                word: ''
+            },
+            wordy: {
+                type: 'wordy_sentence',
+                text: 'In spite of the fact that it was raining heavily, he decided to go for a walk in the park anyway.',
+                context: '',
+                word: ''
+            },
+            adverb: {
+                type: 'adverb_overuse',
+                text: 'She spoke extremely loudly during the meeting.',
+                context: '',
+                word: 'extremely loudly'
+            },
+            hedge: {
+                type: 'hedge_words',
+                text: 'It seems that perhaps the results might possibly indicate some kind of trend.',
+                context: '',
+                word: ''
+            }
+        };
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            checkStatus();
+            addBatchItem();
+            addBatchItem();
+            log('Page loaded. Ready to test LLM enhancements.');
+        });
+        
+        // Logging
+        function log(message) {
+            const logDiv = document.getElementById('logEntries');
+            const time = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="log-time">[${time}]</span>${message}`;
+            logDiv.insertBefore(entry, logDiv.firstChild);
+        }
+        
+        // Check LLM Status
+        async function checkStatus() {
+            const indicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+            const modelInfo = document.getElementById('modelInfo');
+            
+            indicator.className = 'status-indicator';
+            statusText.textContent = 'Checking...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/llm/status`);
+                const data = await response.json();
+                
+                if (data.status === 'ok') {
+                    indicator.classList.add('connected');
+                    statusText.textContent = `Connected to Ollama`;
+                    modelInfo.textContent = `Model: ${data.model} | ${data.model_info?.parameter_size || 'N/A'} | ${data.response_time_ms?.toFixed(0)}ms`;
+                    log(`LLM Status: OK - ${data.model}`);
+                } else {
+                    indicator.classList.add('error');
+                    statusText.textContent = data.error || 'Connection failed';
+                    modelInfo.textContent = data.hint || '';
+                    log(`LLM Status: ERROR - ${data.error}`);
+                }
+            } catch (e) {
+                indicator.classList.add('error');
+                statusText.textContent = 'Cannot connect to backend';
+                modelInfo.textContent = 'Is the FastAPI server running on port 8000?';
+                log(`LLM Status: FAILED - ${e.message}`);
+            }
+        }
+        
+        // Load example
+        function loadExample(name) {
+            const ex = EXAMPLES[name];
+            if (ex) {
+                document.getElementById('issueType').value = ex.type;
+                document.getElementById('inputText').value = ex.text;
+                document.getElementById('contextText').value = ex.context;
+                document.getElementById('wordText').value = ex.word;
+                log(`Loaded example: ${name}`);
+            }
+        }
+        
+        // Single Enhancement
+        async function enhanceSingle() {
+            const btn = document.getElementById('enhanceBtn');
+            const btnText = document.getElementById('enhanceBtnText');
+            const loading = document.getElementById('enhanceLoading');
+            const resultDiv = document.getElementById('singleResult');
+            
+            const text = document.getElementById('inputText').value.trim();
+            const issueType = document.getElementById('issueType').value;
+            const context = document.getElementById('contextText').value.trim();
+            const word = document.getElementById('wordText').value.trim();
+            
+            if (!text) {
+                alert('Please enter text to enhance');
+                return;
+            }
+            
+            btn.disabled = true;
+            btnText.textContent = 'Enhancing...';
+            loading.classList.remove('hidden');
+            resultDiv.classList.add('hidden');
+            
+            log(`Enhancing: "${text.substring(0, 50)}..." (${issueType})`);
+            
+            try {
+                const response = await fetch(`${API_BASE}/enhance/rewrite`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: text,
+                        issue_type: issueType,
+                        context: context,
+                        word: word
+                    })
+                });
+                
+                const data = await response.json();
+                
+                // Display results
+                document.getElementById('originalText').textContent = data.original;
+                document.getElementById('suggestionText').textContent = data.suggestion || '(No suggestion generated)';
+                document.getElementById('explanationText').textContent = data.explanation || '';
+                document.getElementById('confidenceValue').textContent = `${(data.confidence * 100).toFixed(0)}%`;
+                document.getElementById('timeValue').textContent = `${data.generation_time_ms?.toFixed(0) || 0}ms`;
+                document.getElementById('confidenceFill').style.width = `${data.confidence * 100}%`;
+                
+                const resultBox = document.getElementById('singleResultBox');
+                resultBox.className = `result-box ${data.success ? 'success' : 'error'}`;
+                
+                resultDiv.classList.remove('hidden');
+                
+                log(`Result: ${data.success ? 'SUCCESS' : 'FAILED'} - Confidence: ${(data.confidence * 100).toFixed(0)}%`);
+                
+            } catch (e) {
+                log(`ERROR: ${e.message}`);
+                alert('Enhancement failed: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btnText.textContent = 'Enhance with LLM';
+                loading.classList.add('hidden');
+            }
+        }
+        
+        // Copy suggestion
+        function copySuggestion() {
+            const text = document.getElementById('suggestionText').textContent;
+            navigator.clipboard.writeText(text);
+            log('Copied suggestion to clipboard');
+        }
+        
+        // Use suggestion as new input
+        function useSuggestion() {
+            const text = document.getElementById('suggestionText').textContent;
+            document.getElementById('inputText').value = text;
+            document.getElementById('singleResult').classList.add('hidden');
+            log('Using suggestion as new input');
+        }
+        
+        // Batch functionality
+        function addBatchItem() {
+            if (batchCount >= 5) {
+                alert('Maximum 5 issues per batch');
+                return;
+            }
+            
+            batchCount++;
+            const container = document.getElementById('batchItems');
+            const item = document.createElement('div');
+            item.className = 'batch-item';
+            item.id = `batch-item-${batchCount}`;
+            item.innerHTML = `
+                <div class="batch-item-header">
+                    <div class="batch-item-number">${batchCount}</div>
+                    <button class="remove-btn" onclick="removeBatchItem(${batchCount})">Remove</button>
+                </div>
+                <div class="form-group" style="margin-bottom: 0.5rem;">
+                    <select class="batch-type" style="margin-bottom: 0.5rem;">
+                        <option value="passive_voice">Passive Voice</option>
+                        <option value="show_dont_tell">Show Don't Tell</option>
+                        <option value="wordy_sentence">Wordy</option>
+                        <option value="adverb_overuse">Adverb</option>
+                        <option value="general">General</option>
+                    </select>
+                    <input type="text" class="batch-text" placeholder="Enter text...">
+                </div>
+            `;
+            container.appendChild(item);
+        }
+        
+        function removeBatchItem(id) {
+            const item = document.getElementById(`batch-item-${id}`);
+            if (item) {
+                item.remove();
+                batchCount = document.querySelectorAll('.batch-item').length;
+                // Renumber
+                document.querySelectorAll('.batch-item').forEach((item, i) => {
+                    item.querySelector('.batch-item-number').textContent = i + 1;
+                });
+            }
+        }
+        
+        function clearBatch() {
+            document.getElementById('batchItems').innerHTML = '';
+            document.getElementById('batchResults').classList.add('hidden');
+            batchCount = 0;
+            addBatchItem();
+            addBatchItem();
+            log('Batch cleared');
+        }
+        
+        async function enhanceBatch() {
+            const btn = document.getElementById('batchBtn');
+            const btnText = document.getElementById('batchBtnText');
+            const loading = document.getElementById('batchLoading');
+            const resultsDiv = document.getElementById('batchResults');
+            
+            // Collect batch items
+            const items = document.querySelectorAll('.batch-item');
+            const issues = [];
+            
+            items.forEach(item => {
+                const text = item.querySelector('.batch-text').value.trim();
+                const type = item.querySelector('.batch-type').value;
+                if (text) {
+                    issues.push({ text, issue_type: type });
+                }
+            });
+            
+            if (issues.length === 0) {
+                alert('Please enter at least one issue');
+                return;
+            }
+            
+            btn.disabled = true;
+            btnText.textContent = 'Processing...';
+            loading.classList.remove('hidden');
+            resultsDiv.classList.add('hidden');
+            
+            log(`Batch enhancing ${issues.length} issues...`);
+            
+            try {
+                const response = await fetch(`${API_BASE}/enhance/batch`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ issues })
+                });
+                
+                const data = await response.json();
+                
+                // Display results
+                const resultsList = document.getElementById('batchResultsList');
+                resultsList.innerHTML = '';
+                
+                data.results.forEach((result, i) => {
+                    const div = document.createElement('div');
+                    div.className = `result-box ${result.success ? 'success' : 'error'}`;
+                    div.style.marginTop = '0.5rem';
+                    div.innerHTML = `
+                        <div style="font-size: 0.75rem; color: var(--text-muted);">#${i + 1} ${result.issue_type}</div>
+                        <div style="margin: 0.5rem 0;"><strong>Original:</strong> ${result.original}</div>
+                        <div><strong>Suggestion:</strong> ${result.suggestion || '(none)'}</div>
+                        <div style="font-size: 0.875rem; color: var(--text-muted); margin-top: 0.25rem;">
+                            Confidence: ${(result.confidence * 100).toFixed(0)}%
+                        </div>
+                    `;
+                    resultsList.appendChild(div);
+                });
+                
+                document.getElementById('batchTimeValue').textContent = `${data.total_time_ms?.toFixed(0) || 0}ms`;
+                resultsDiv.classList.remove('hidden');
+                
+                log(`Batch complete: ${data.results.length} results in ${data.total_time_ms?.toFixed(0)}ms`);
+                
+            } catch (e) {
+                log(`Batch ERROR: ${e.message}`);
+                alert('Batch enhancement failed: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btnText.textContent = 'Enhance All';
+                loading.classList.add('hidden');
+            }
+        }
+        
+        // ==================== Style Transformation ====================
+        
+        const STYLE_EXAMPLES = {
+            informal: {
+                text: "Hey, gonna tell you about this awesome thing I found! It's like, super cool and everyone should totally check it out.",
+                target: 'formal'
+            },
+            technical: {
+                text: "The implementation utilizes a microservices architecture with containerized deployments orchestrated via Kubernetes, enabling horizontal scalability and fault tolerance.",
+                target: 'casual'
+            },
+            plain: {
+                text: "The old man sat on the bench. He watched the birds. The sun was setting. He felt tired.",
+                target: 'creative'
+            },
+            news: {
+                text: "Local authorities reported a 15% increase in community garden participation this year. The initiative, launched in 2024, aims to promote sustainable food practices.",
+                target: 'narrative'
+            }
+        };
+        
+        function loadStyleExample(name) {
+            const ex = STYLE_EXAMPLES[name];
+            if (ex) {
+                document.getElementById('styleText').value = ex.text;
+                document.getElementById('targetStyle').value = ex.target;
+                document.getElementById('styleResult').classList.add('hidden');
+                log(`Loaded style example: ${name} → ${ex.target}`);
+            }
+        }
+        
+        async function transformStyle() {
+            const btn = document.getElementById('transformBtn');
+            const btnText = document.getElementById('transformBtnText');
+            const loading = document.getElementById('transformLoading');
+            const resultDiv = document.getElementById('styleResult');
+            
+            const text = document.getElementById('styleText').value.trim();
+            const targetStyle = document.getElementById('targetStyle').value;
+            const mode = document.querySelector('input[name="transformMode"]:checked').value;
+            
+            if (!text) {
+                alert('Please enter text to transform');
+                return;
+            }
+            
+            btn.disabled = true;
+            btnText.textContent = mode === 'deep' ? 'Transforming with LLM...' : 'Transforming...';
+            loading.classList.remove('hidden');
+            resultDiv.classList.add('hidden');
+            
+            log(`Style transform: ${text.substring(0, 40)}... → ${targetStyle} (${mode} mode)`);
+            
+            try {
+                const response = await fetch(`${API_BASE}/transform/style`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: text,
+                        target_style: targetStyle,
+                        source_style: 'auto',
+                        mode: mode
+                    })
+                });
+                
+                const data = await response.json();
+                
+                // Display results
+                document.getElementById('transformedText').textContent = data.transformed || '(No transformation generated)';
+                document.getElementById('styleModeValue').textContent = data.mode;
+                document.getElementById('styleTargetValue').textContent = data.target_style;
+                document.getElementById('styleConfidenceValue').textContent = `${(data.confidence * 100).toFixed(0)}%`;
+                document.getElementById('styleTimeValue').textContent = `${data.generation_time_ms?.toFixed(0) || 0}ms`;
+                document.getElementById('styleConfidenceFill').style.width = `${data.confidence * 100}%`;
+                document.getElementById('styleChangesSummary').textContent = data.changes_summary || '';
+                
+                const resultBox = document.getElementById('styleResultBox');
+                resultBox.className = `result-box ${data.success ? 'success' : 'error'}`;
+                
+                resultDiv.classList.remove('hidden');
+                
+                log(`Style transform: ${data.success ? 'SUCCESS' : 'FAILED'} - ${data.mode} mode, ${(data.confidence * 100).toFixed(0)}% confidence`);
+                
+            } catch (e) {
+                log(`Style ERROR: ${e.message}`);
+                alert('Style transformation failed: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btnText.textContent = 'Transform Style';
+                loading.classList.add('hidden');
+            }
+        }
+        
+        function copyTransformed() {
+            const text = document.getElementById('transformedText').textContent;
+            navigator.clipboard.writeText(text);
+            log('Copied transformed text to clipboard');
+        }
+        
+        function useTransformed() {
+            const text = document.getElementById('transformedText').textContent;
+            document.getElementById('styleText').value = text;
+            document.getElementById('styleResult').classList.add('hidden');
+            log('Using transformed text as new input');
+        }
+        
+        // ==================== Story Continuation (Phase 4) ====================
+        
+        const STORY_EXAMPLES = {
+            fantasy: {
+                text: `The ancient tome glowed with an otherworldly light as Elena traced the runes with trembling fingers. The library had been abandoned for centuries, yet she could feel eyes watching her from the shadows.
+
+"The spell requires blood," whispered the voice in her head—the same voice that had guided her here.
+
+She pulled out the silver dagger, its blade etched with symbols that matched those in the book. One cut. That's all it would take to open the gateway.`
+            },
+            thriller: {
+                text: `Detective Morgan stared at the crime scene photos spread across his desk. Three victims. Three weeks. Same MO.
+
+The killer left no forensic evidence, just a calling card—a single white chess piece placed on each body. A knight.
+
+His phone buzzed. Unknown number.
+
+"You're getting close, Detective. But not close enough. Would you like a hint?"
+
+Morgan's blood ran cold. How did the killer get his private number?`
+            },
+            romance: {
+                text: `The coffee shop was crowded, but Emma spotted him immediately—the same dark-haired stranger who'd caught her umbrella when the wind tore it from her hands last week.
+
+He looked up from his laptop, and their eyes met. A slight smile crossed his face.
+
+"The chair across from me is free," he said, gesturing. "If you're looking for a seat."
+
+Her heart did something ridiculous in her chest. This was not how these things happened in real life.`
+            },
+            scifi: {
+                text: `The colony ship Aurora had been drifting for three hundred years when Commander Chen found the anomaly.
+
+"It's not on any charts," Lieutenant Park said, studying the holographic display. "A planet, Class-M atmosphere, but there shouldn't be anything here."
+
+Chen zoomed in on the surface scan. Cities. Massive structures that defied physics.
+
+"We're not alone," she whispered. "We were never alone."
+
+The ship's AI interrupted: "Commander, we're being scanned. Something is waking up down there."`
+            }
+        };
+        
+        function loadStoryExample(name) {
+            const ex = STORY_EXAMPLES[name];
+            if (ex) {
+                document.getElementById('storyText').value = ex.text;
+                document.getElementById('storyAnalysis').classList.add('hidden');
+                document.getElementById('storyResult').classList.add('hidden');
+                document.getElementById('optionsResult').classList.add('hidden');
+                log(`Loaded story example: ${name}`);
+            }
+        }
+        
+        async function analyzeStory() {
+            const btn = document.getElementById('analyzeBtn');
+            const btnText = document.getElementById('analyzeBtnText');
+            const loading = document.getElementById('analyzeLoading');
+            const resultDiv = document.getElementById('storyAnalysis');
+            
+            const text = document.getElementById('storyText').value.trim();
+            
+            if (!text) {
+                alert('Please enter story text to analyze');
+                return;
+            }
+            
+            btn.disabled = true;
+            btnText.textContent = 'Analyzing...';
+            loading.classList.remove('hidden');
+            
+            log(`Analyzing story: ${text.substring(0, 50)}...`);
+            
+            try {
+                const response = await fetch(`${API_BASE}/story/analyze`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: text })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('analysisPov').textContent = data.pov.replace(/_/g, ' ');
+                    document.getElementById('analysisTense').textContent = data.tense;
+                    document.getElementById('analysisTone').textContent = data.tone;
+                    document.getElementById('analysisGenre').textContent = data.genre_hint;
+                    document.getElementById('analysisCharacters').textContent = 
+                        data.characters.length > 0 
+                            ? data.characters.map(c => `${c.name} (${c.mentions}x${c.is_protagonist ? ', protagonist' : ''})`).join(', ')
+                            : 'None detected';
+                    document.getElementById('analysisThemes').textContent = 
+                        data.themes.length > 0 ? data.themes.join(', ') : 'None detected';
+                    document.getElementById('analysisSetting').textContent = data.setting || 'Not described';
+                    document.getElementById('analysisWordCount').textContent = data.word_count;
+                    document.getElementById('analysisPlotElements').textContent = data.plot_element_count;
+                    
+                    resultDiv.classList.remove('hidden');
+                    log(`Analysis complete: ${data.pov}, ${data.tense}, ${data.tone}`);
+                } else {
+                    log(`Analysis failed: ${data.error}`);
+                    alert('Analysis failed: ' + (data.error || 'Unknown error'));
+                }
+                
+            } catch (e) {
+                log(`Analysis ERROR: ${e.message}`);
+                alert('Analysis failed: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btnText.textContent = 'Analyze';
+                loading.classList.add('hidden');
+            }
+        }
+        
+        async function continueStory() {
+            const btn = document.getElementById('continueBtn');
+            const btnText = document.getElementById('continueBtnText');
+            const loading = document.getElementById('continueLoading');
+            const resultDiv = document.getElementById('storyResult');
+            const continuationText = document.getElementById('continuationText');
+            
+            const text = document.getElementById('storyText').value.trim();
+            const wordTarget = parseInt(document.getElementById('wordTarget').value) || 150;
+            const customInstruction = document.getElementById('customInstruction').value.trim();
+            const mode = document.querySelector('input[name="storyMode"]:checked').value;
+            
+            if (!text) {
+                alert('Please enter story text to continue');
+                return;
+            }
+            
+            btn.disabled = true;
+            loading.classList.remove('hidden');
+            resultDiv.classList.remove('hidden');
+            document.getElementById('optionsResult').classList.add('hidden');
+            
+            log(`Continuing story (${mode} mode, ${wordTarget} words)...`);
+            
+            if (mode === 'stream') {
+                // SSE Streaming mode
+                btnText.textContent = 'Streaming...';
+                continuationText.textContent = '';
+                
+                try {
+                    const response = await fetch(`${API_BASE}/story/continue`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            text: text,
+                            word_target: wordTarget,
+                            custom_instruction: customInstruction,
+                            stream: true
+                        })
+                    });
+                    
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = '';
+                    let fullText = '';
+                    
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop(); // Keep incomplete line in buffer
+                        
+                        for (const line of lines) {
+                            if (line.startsWith('event: ')) {
+                                const eventType = line.slice(7);
+                                continue;
+                            }
+                            if (line.startsWith('data: ')) {
+                                try {
+                                    const data = JSON.parse(line.slice(6));
+                                    
+                                    if (data.token) {
+                                        fullText += data.token;
+                                        continuationText.textContent = fullText;
+                                    } else if (data.pov) {
+                                        // Context event
+                                        document.getElementById('resultPov').textContent = data.pov.replace(/_/g, ' ');
+                                        document.getElementById('resultTense').textContent = data.tense;
+                                        document.getElementById('resultTone').textContent = data.tone;
+                                    } else if (data.generation_time_ms) {
+                                        // Done event
+                                        document.getElementById('resultTokens').textContent = data.tokens_generated;
+                                        document.getElementById('resultTime').textContent = `${data.generation_time_ms.toFixed(0)}ms`;
+                                        log(`Stream complete: ${data.tokens_generated} tokens in ${data.generation_time_ms.toFixed(0)}ms`);
+                                    }
+                                } catch (e) {
+                                    // Ignore parse errors
+                                }
+                            }
+                        }
+                    }
+                    
+                    document.getElementById('storyResultBox').className = 'result-box success';
+                    
+                } catch (e) {
+                    log(`Stream ERROR: ${e.message}`);
+                    continuationText.textContent = `Error: ${e.message}`;
+                    document.getElementById('storyResultBox').className = 'result-box error';
+                }
+                
+            } else {
+                // Normal (non-streaming) mode
+                btnText.textContent = 'Generating...';
+                continuationText.textContent = 'Generating continuation...';
+                
+                try {
+                    const response = await fetch(`${API_BASE}/story/continue`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            text: text,
+                            word_target: wordTarget,
+                            custom_instruction: customInstruction,
+                            stream: false
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    continuationText.textContent = data.continuation || '(No continuation generated)';
+                    document.getElementById('resultPov').textContent = data.pov?.replace(/_/g, ' ') || '-';
+                    document.getElementById('resultTense').textContent = data.tense || '-';
+                    document.getElementById('resultTone').textContent = data.tone || '-';
+                    document.getElementById('resultTokens').textContent = data.tokens_generated || 0;
+                    document.getElementById('resultTime').textContent = `${data.generation_time_ms?.toFixed(0) || 0}ms`;
+                    
+                    document.getElementById('storyResultBox').className = `result-box ${data.success ? 'success' : 'error'}`;
+                    
+                    log(`Continuation ${data.success ? 'SUCCESS' : 'FAILED'}: ${data.tokens_generated} tokens in ${data.generation_time_ms?.toFixed(0)}ms`);
+                    
+                } catch (e) {
+                    log(`Continuation ERROR: ${e.message}`);
+                    continuationText.textContent = `Error: ${e.message}`;
+                    document.getElementById('storyResultBox').className = 'result-box error';
+                }
+            }
+            
+            btn.disabled = false;
+            btnText.textContent = 'Continue Story';
+            loading.classList.add('hidden');
+        }
+        
+        async function generateOptions() {
+            const btn = document.getElementById('optionsBtn');
+            const btnText = document.getElementById('optionsBtnText');
+            const loading = document.getElementById('optionsLoading');
+            const resultDiv = document.getElementById('optionsResult');
+            const optionsList = document.getElementById('optionsList');
+            
+            const text = document.getElementById('storyText').value.trim();
+            
+            if (!text) {
+                alert('Please enter story text');
+                return;
+            }
+            
+            btn.disabled = true;
+            btnText.textContent = 'Generating...';
+            loading.classList.remove('hidden');
+            document.getElementById('storyResult').classList.add('hidden');
+            
+            log('Generating continuation options...');
+            
+            try {
+                const response = await fetch(`${API_BASE}/story/options`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: text,
+                        num_options: 3
+                    })
+                });
+                
+                const data = await response.json();
+                
+                optionsList.innerHTML = '';
+                
+                if (data.success && data.options.length > 0) {
+                    data.options.forEach((opt, i) => {
+                        const div = document.createElement('div');
+                        div.className = 'result-box';
+                        div.style.marginTop = '0.5rem';
+                        div.style.cursor = 'pointer';
+                        div.innerHTML = `
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-size: 0.75rem; color: var(--primary); text-transform: uppercase;">
+                                    ${i + 1}. ${opt.direction}
+                                </span>
+                                <button class="btn-copy" onclick="useOption(${i})" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">
+                                    Use This
+                                </button>
+                            </div>
+                            <div style="margin-top: 0.5rem;">${opt.text}</div>
+                        `;
+                        optionsList.appendChild(div);
+                    });
+                    
+                    // Store options for use
+                    window.continuationOptions = data.options;
+                    
+                    resultDiv.classList.remove('hidden');
+                    log(`Generated ${data.options.length} options in ${data.generation_time_ms?.toFixed(0)}ms`);
+                } else {
+                    log(`Options generation failed: ${data.error || 'No options returned'}`);
+                    alert('Failed to generate options: ' + (data.error || 'Unknown error'));
+                }
+                
+            } catch (e) {
+                log(`Options ERROR: ${e.message}`);
+                alert('Options generation failed: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btnText.textContent = 'Get Options';
+                loading.classList.add('hidden');
+            }
+        }
+        
+        function useOption(index) {
+            if (window.continuationOptions && window.continuationOptions[index]) {
+                const opt = window.continuationOptions[index];
+                document.getElementById('continuationText').textContent = opt.text;
+                document.getElementById('storyResult').classList.remove('hidden');
+                document.getElementById('storyResultBox').className = 'result-box success';
+                document.getElementById('optionsResult').classList.add('hidden');
+                log(`Selected option ${index + 1}: ${opt.direction}`);
+            }
+        }
+        
+        function copyContinuation() {
+            const text = document.getElementById('continuationText').textContent;
+            navigator.clipboard.writeText(text);
+            log('Copied continuation to clipboard');
+        }
+        
+        function appendToStory() {
+            const continuation = document.getElementById('continuationText').textContent;
+            const storyText = document.getElementById('storyText');
+            storyText.value = storyText.value.trim() + '\n\n' + continuation;
+            document.getElementById('storyResult').classList.add('hidden');
+            log('Appended continuation to story');
+        }
+    </script>
+</body>
+</html>

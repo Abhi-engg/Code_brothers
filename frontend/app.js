@@ -11,6 +11,8 @@ const CONFIG = { API_BASE_URL: 'http://localhost:8000', DEBOUNCE_DELAY: 300 };
 
 let analysisResults = null;
 let currentTab = 'write';
+let llmAvailable = false;  // LLM status
+let llmModel = '';         // Current LLM model name
 
 // ═══════════════════════════════════════════════════════════
 // DOM REFERENCES
@@ -27,6 +29,7 @@ const elements = {
     loadingOverlay:   document.getElementById('loading-overlay'),
     toastContainer:   document.getElementById('toast-container'),
     apiStatus:        document.getElementById('api-status'),
+    llmStatus:        document.getElementById('llm-status'),  // LLM status indicator
     targetStyle:      document.getElementById('target-style'),
     targetTone:       document.getElementById('target-tone'),
     thresholdSentence:document.getElementById('threshold-sentence'),
@@ -54,6 +57,7 @@ const featureToggles = {
 document.addEventListener('DOMContentLoaded', () => {
     initEventListeners();
     checkAPIHealth();
+    checkLLMStatus();  // Check LLM availability
     updateCounts();
 });
 
@@ -95,6 +99,181 @@ async function checkAPIHealth() {
         elements.apiStatus.innerHTML = '<span class="wc-status-dot"></span> API Offline';
         elements.apiStatus.className = 'wc-api-status disconnected';
         showToast('API is not available. Make sure the server is running on port 8000.', 'error');
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+// LLM API FUNCTIONS
+// ═══════════════════════════════════════════════════════════
+async function checkLLMStatus() {
+    if (!elements.llmStatus) return;
+    try {
+        const r = await fetch(`${CONFIG.API_BASE_URL}/llm/status`);
+        const data = await r.json();
+        if (data.status === 'ok' && data.model_available) {
+            llmAvailable = true;
+            llmModel = data.model || 'LLM';
+            elements.llmStatus.innerHTML = `<span class="wc-status-dot"></span> ${llmModel}`;
+            elements.llmStatus.className = 'wc-api-status connected';
+            elements.llmStatus.title = `LLM: ${data.model_info?.parameter_size || 'Ready'}`;
+        } else {
+            llmAvailable = false;
+            elements.llmStatus.innerHTML = '<span class="wc-status-dot"></span> LLM Offline';
+            elements.llmStatus.className = 'wc-api-status disconnected';
+            elements.llmStatus.title = data.hint || 'Ollama not available';
+        }
+    } catch {
+        llmAvailable = false;
+        if (elements.llmStatus) {
+            elements.llmStatus.innerHTML = '<span class="wc-status-dot"></span> LLM N/A';
+            elements.llmStatus.className = 'wc-api-status disconnected';
+        }
+    }
+}
+
+// LLM Rewrite Enhancement
+async function llmEnhanceText(text, issueType, context = '', word = '') {
+    if (!llmAvailable) {
+        showToast('LLM is not available. Make sure Ollama is running.', 'error');
+        return null;
+    }
+    try {
+        const r = await fetch(`${CONFIG.API_BASE_URL}/enhance/rewrite`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, issue_type: issueType, context, word })
+        });
+        return await r.json();
+    } catch (e) {
+        showToast('LLM enhancement failed: ' + e.message, 'error');
+        return null;
+    }
+}
+
+// LLM Style Transformation
+async function llmTransformStyle(text, targetStyle, mode = 'deep') {
+    if (!llmAvailable && mode === 'deep') {
+        showToast('LLM is not available for deep transformation.', 'warning');
+        mode = 'quick';  // Fallback to rule-based
+    }
+    try {
+        const r = await fetch(`${CONFIG.API_BASE_URL}/transform/style`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, target_style: targetStyle, mode })
+        });
+        return await r.json();
+    } catch (e) {
+        showToast('Style transformation failed: ' + e.message, 'error');
+        return null;
+    }
+}
+
+// LLM Story Continuation
+async function llmContinueStory(text, wordTarget = 150, instruction = '', stream = false) {
+    if (!llmAvailable) {
+        showToast('LLM is not available for story continuation.', 'error');
+        return null;
+    }
+    try {
+        const r = await fetch(`${CONFIG.API_BASE_URL}/story/continue`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, word_target: wordTarget, custom_instruction: instruction, stream })
+        });
+        return await r.json();
+    } catch (e) {
+        showToast('Story continuation failed: ' + e.message, 'error');
+        return null;
+    }
+}
+
+// LLM Story Analysis
+async function llmAnalyzeStory(text) {
+    try {
+        const r = await fetch(`${CONFIG.API_BASE_URL}/story/analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text })
+        });
+        return await r.json();
+    } catch (e) {
+        return null;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════
+// AI STYLE TRANSFORM UI HANDLER
+// ═══════════════════════════════════════════════════════════
+async function runAIStyleTransform(mode) {
+    const text = elements.textInput?.value?.trim();
+    if (!text) {
+        showToast('Please enter text to transform', 'warning');
+        return;
+    }
+
+    const targetStyle = document.getElementById('ai-style-select')?.value || 'formal';
+    const resultDiv = document.getElementById('ai-style-result');
+    const loadingDiv = document.getElementById('ai-style-loading');
+    const outputDiv = document.getElementById('ai-style-output');
+
+    if (!resultDiv || !loadingDiv || !outputDiv) return;
+
+    // Show loading
+    resultDiv.classList.remove('hidden');
+    loadingDiv.classList.remove('hidden');
+    outputDiv.innerHTML = '';
+
+    try {
+        const result = await llmTransformStyle(text, targetStyle, mode);
+        loadingDiv.classList.add('hidden');
+
+        if (result && result.success) {
+            outputDiv.innerHTML = `
+                <div class="transformation-diff" style="margin-bottom:12px">
+                    <div class="diff-panel diff-panel-orig" style="font-size:0.85rem">
+                        <span class="diff-label">Original</span>
+                        <div style="white-space:pre-wrap">${_esc(result.original)}</div>
+                    </div>
+                    <div class="diff-panel diff-panel-new" style="font-size:0.85rem">
+                        <span class="diff-label">Transformed (${_esc(result.target_style)})</span>
+                        <div style="white-space:pre-wrap">${_esc(result.transformed)}</div>
+                    </div>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+                    <div class="text-xs text-muted">
+                        Mode: <strong>${result.mode}</strong> | 
+                        Confidence: <strong>${(result.confidence * 100).toFixed(0)}%</strong> |
+                        Time: <strong>${result.generation_time_ms?.toFixed(0) || 0}ms</strong>
+                        ${result.changes_summary ? ` | ${_esc(result.changes_summary)}` : ''}
+                    </div>
+                    <div style="display:flex;gap:8px">
+                        <button onclick="copyToClipboard('${_esc(result.transformed).replace(/'/g, "\\'")}', 'Transformed text copied!')" class="wc-btn wc-btn-ghost wc-btn-sm">📋 Copy</button>
+                        <button onclick="applyTransformedText('${_esc(result.transformed).replace(/'/g, "\\'")}', '${_esc(result.original).replace(/'/g, "\\'")}')" class="wc-btn wc-btn-primary wc-btn-sm">✅ Apply</button>
+                    </div>
+                </div>
+            `;
+            showToast(`Style transformed to ${targetStyle}!`, 'success');
+        } else {
+            outputDiv.innerHTML = `<div class="text-sm" style="color:var(--wc-error);padding:12px;background:rgba(239,68,68,0.1);border-radius:8px">❌ Transformation failed: ${_esc(result?.error || 'Unknown error')}</div>`;
+        }
+    } catch (e) {
+        loadingDiv.classList.add('hidden');
+        outputDiv.innerHTML = `<div class="text-sm" style="color:var(--wc-error);padding:12px;background:rgba(239,68,68,0.1);border-radius:8px">❌ Error: ${_esc(e.message)}</div>`;
+    }
+}
+
+// Helper: Copy to clipboard
+function copyToClipboard(text, msg = 'Copied!') {
+    navigator.clipboard.writeText(text).then(() => showToast(msg, 'success')).catch(() => showToast('Copy failed', 'error'));
+}
+
+// Helper: Apply transformed text
+function applyTransformedText(transformed, original) {
+    if (elements.textInput) {
+        elements.textInput.value = transformed;
+        updateCounts();
+        showToast('Transformed text applied! Re-analyze to see updated results.', 'success');
     }
 }
 
@@ -601,6 +780,42 @@ function renderStyleTone() {
                 <div class="wc-stat"><span class="wc-stat-value" style="color:var(--wc-error)">${sent.negative_words || 0}</span><span class="wc-stat-label">Negative Words</span></div>
             </div></div></div>`;
     }
+
+    // ── AI Style Transformation ──
+    html += `<div class="wc-card mt-md" style="border: 2px solid var(--wc-primary); background: linear-gradient(135deg, rgba(99,102,241,0.05), rgba(139,92,246,0.05));">
+        <div class="wc-card-header">
+            <h3>🤖 AI Style Transformation</h3>
+            <span class="wc-badge ${llmAvailable ? 'wc-badge-success' : 'wc-badge-muted'}">${llmAvailable ? llmModel : 'LLM Offline'}</span>
+        </div>
+        <div class="wc-card-body">
+            <p class="text-sm text-muted mb-md">Transform your entire text using AI-powered style conversion (powered by local Ollama LLM)</p>
+            <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+                <div style="flex:1;min-width:150px">
+                    <label class="text-xs text-muted">Target Style</label>
+                    <select id="ai-style-select" class="wc-select" style="margin-top:4px">
+                        <option value="formal">🏛️ Formal</option>
+                        <option value="casual">😊 Casual</option>
+                        <option value="academic">📚 Academic</option>
+                        <option value="creative">🎨 Creative</option>
+                        <option value="persuasive">💪 Persuasive</option>
+                        <option value="journalistic">📰 Journalistic</option>
+                        <option value="narrative">📖 Narrative</option>
+                    </select>
+                </div>
+                <div style="display:flex;gap:8px">
+                    <button onclick="runAIStyleTransform('quick')" class="wc-btn wc-btn-ghost" title="Rule-based, instant">⚡ Quick</button>
+                    <button onclick="runAIStyleTransform('deep')" class="wc-btn wc-btn-primary" ${!llmAvailable ? 'disabled' : ''} title="LLM-powered, more natural">🧠 Deep AI</button>
+                </div>
+            </div>
+            <div id="ai-style-result" class="mt-md hidden">
+                <div class="result-loading hidden" id="ai-style-loading" style="text-align:center;padding:20px">
+                    <div class="wc-spinner" style="margin:0 auto 8px"></div>
+                    <p class="text-sm text-muted">Transforming with AI...</p>
+                </div>
+                <div id="ai-style-output"></div>
+            </div>
+        </div>
+    </div>`;
 
     if (!tone && !sa && !st && !sent) {
         html += `<div style="text-align:center;padding:48px 0"><div style="font-size:3rem;margin-bottom:8px">🎨</div><p class="font-semibold">No Style & Tone Data</p><p class="text-muted text-sm">Submit text to see style and tone analysis.</p></div>`;

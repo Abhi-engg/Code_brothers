@@ -221,3 +221,310 @@ class HealthResponse(BaseModel):
     version: str
     nlp_model: str
     features: List[str]
+
+
+class LLMModelInfo(BaseModel):
+    """LLM model information"""
+    name: str
+    size_gb: float
+    parameter_size: str
+    quantization: str
+
+
+class LLMStatusResponse(BaseModel):
+    """LLM status response"""
+    status: str = Field(..., description="Status: ok, model_not_found, or error")
+    connected: bool = Field(..., description="Whether Ollama server is reachable")
+    model: str = Field(..., description="Configured model name")
+    model_available: bool = Field(default=False, description="Whether the model is loaded")
+    model_info: Optional[LLMModelInfo] = Field(default=None, description="Model details if available")
+    available_models: Optional[List[str]] = Field(default=None, description="List of available models")
+    response_time_ms: Optional[float] = Field(default=None, description="API response time in milliseconds")
+    error: Optional[str] = Field(default=None, description="Error message if status is error")
+    hint: Optional[str] = Field(default=None, description="Helpful hint for resolving issues")
+
+
+# ==================== LLM Enhancement Models ====================
+
+class IssueTypeEnum(str, Enum):
+    """Types of writing issues that can be enhanced by LLM"""
+    GRAMMAR_ERROR = "grammar_error"
+    PASSIVE_VOICE = "passive_voice"
+    SUBJECT_VERB_AGREEMENT = "subject_verb_agreement"
+    SENTENCE_FRAGMENT = "sentence_fragment"
+    RUN_ON_SENTENCE = "run_on_sentence"
+    WORDY_SENTENCE = "wordy_sentence"
+    WEAK_OPENING = "weak_opening"
+    CLICHE = "cliche"
+    REPEATED_WORD = "repeated_word"
+    LONG_SENTENCE = "long_sentence"
+    SHOW_DONT_TELL = "show_dont_tell"
+    ADVERB_OVERUSE = "adverb_overuse"
+    HEDGE_WORDS = "hedge_words"
+    NOMINALIZATION = "nominalization"
+    GENERAL = "general"
+
+
+class RewriteRequest(BaseModel):
+    """Request model for LLM rewrite enhancement"""
+    text: str = Field(..., min_length=1, max_length=2000, description="Text to enhance")
+    issue_type: IssueTypeEnum = Field(
+        default=IssueTypeEnum.GENERAL,
+        description="Type of writing issue to fix"
+    )
+    context: Optional[str] = Field(
+        default="",
+        max_length=1000,
+        description="Surrounding text for better context"
+    )
+    word: Optional[str] = Field(
+        default="",
+        max_length=100,
+        description="Specific word to address (for repeated word, adverb issues)"
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "text": "The ball was thrown by the boy.",
+                "issue_type": "passive_voice",
+                "context": "The children were playing in the park.",
+                "word": ""
+            }
+        }
+
+
+class RewriteResponse(BaseModel):
+    """Response model for LLM rewrite enhancement"""
+    success: bool = Field(..., description="Whether enhancement was successful")
+    original: str = Field(..., description="Original text")
+    suggestion: str = Field(default="", description="Enhanced text suggestion")
+    explanation: str = Field(default="", description="Explanation of the improvement")
+    issue_type: str = Field(..., description="Type of issue that was addressed")
+    confidence: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Confidence score of the suggestion (0.0-1.0)"
+    )
+    generation_time_ms: float = Field(default=0.0, description="LLM generation time in milliseconds")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+
+
+class BatchRewriteRequest(BaseModel):
+    """Request model for batch LLM rewrite enhancement"""
+    issues: List[Dict[str, Any]] = Field(
+        ...,
+        min_length=1,
+        max_length=5,
+        description="List of issues to enhance (max 5)"
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "issues": [
+                    {"text": "The door was opened by him.", "issue_type": "passive_voice"},
+                    {"text": "She ran really fast.", "issue_type": "adverb_overuse", "word": "really fast"}
+                ]
+            }
+        }
+
+
+class BatchRewriteResponse(BaseModel):
+    """Response model for batch LLM rewrite enhancement"""
+    success: bool = Field(..., description="Whether batch processing was successful")
+    results: List[RewriteResponse] = Field(..., description="List of enhancement results")
+    total_time_ms: float = Field(default=0.0, description="Total processing time")
+
+
+class StyleTypeEnum(str, Enum):
+    """Available style types for LLM transformation"""
+    FORMAL = "formal"
+    CASUAL = "casual"
+    ACADEMIC = "academic"
+    CREATIVE = "creative"
+    PERSUASIVE = "persuasive"
+    JOURNALISTIC = "journalistic"
+    NARRATIVE = "narrative"
+
+
+class TransformModeEnum(str, Enum):
+    """Transform mode - quick (rule-based) or deep (LLM)"""
+    QUICK = "quick"
+    DEEP = "deep"
+
+
+class StyleTransformRequest(BaseModel):
+    """Request model for LLM style transformation"""
+    text: str = Field(..., min_length=1, max_length=5000, description="Text to transform")
+    target_style: StyleTypeEnum = Field(
+        default=StyleTypeEnum.FORMAL,
+        description="Target style to transform to"
+    )
+    source_style: Optional[str] = Field(
+        default="auto",
+        description="Source style hint (optional)"
+    )
+    mode: TransformModeEnum = Field(
+        default=TransformModeEnum.DEEP,
+        description="Transform mode: 'quick' (rule-based) or 'deep' (LLM)"
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "text": "Hey, gonna tell you about this awesome thing I found!",
+                "target_style": "formal",
+                "source_style": "auto",
+                "mode": "deep"
+            }
+        }
+
+
+class StyleTransformResponse(BaseModel):
+    """Response model for LLM style transformation"""
+    success: bool = Field(..., description="Whether transformation was successful")
+    original: str = Field(..., description="Original text")
+    transformed: str = Field(default="", description="Transformed text")
+    source_style: str = Field(..., description="Detected or provided source style")
+    target_style: str = Field(..., description="Target style")
+    mode: str = Field(..., description="Mode used: quick or deep")
+    changes_summary: str = Field(default="", description="Summary of style changes")
+    confidence: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Confidence score (0.0-1.0)"
+    )
+    generation_time_ms: float = Field(default=0.0, description="Processing time in ms")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+
+
+# ==================== Story Continuation Models (Phase 4) ====================
+
+class StoryAnalyzeRequest(BaseModel):
+    """Request model for story analysis"""
+    text: str = Field(..., min_length=10, max_length=50000, description="Story text to analyze")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "text": "The old wizard sat alone in his tower, watching the storm gather over the mountains. Something was coming—he could feel it in his bones."
+            }
+        }
+
+
+class CharacterInfo(BaseModel):
+    """Character information"""
+    name: str
+    mentions: int
+    is_protagonist: bool = False
+
+
+class StoryAnalyzeResponse(BaseModel):
+    """Response model for story analysis"""
+    success: bool = Field(..., description="Whether analysis was successful")
+    pov: str = Field(..., description="Point of view (first_person, third_person_limited, etc.)")
+    tense: str = Field(..., description="Narrative tense (past, present, mixed)")
+    tone: str = Field(..., description="Narrative tone (serious, humorous, suspenseful, etc.)")
+    genre_hint: str = Field(..., description="Detected genre hint")
+    characters: List[CharacterInfo] = Field(default=[], description="Extracted characters")
+    themes: List[str] = Field(default=[], description="Detected themes")
+    setting: str = Field(default="", description="Setting description")
+    recent_events: List[str] = Field(default=[], description="Recent events from story")
+    word_count: int = Field(default=0, description="Total word count")
+    plot_element_count: int = Field(default=0, description="Number of plot elements detected")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+
+
+class StoryContinueRequest(BaseModel):
+    """Request model for story continuation"""
+    text: str = Field(..., min_length=10, max_length=50000, description="Story text to continue")
+    word_target: int = Field(
+        default=150,
+        ge=50,
+        le=500,
+        description="Target word count for continuation"
+    )
+    custom_instruction: str = Field(
+        default="",
+        max_length=500,
+        description="Optional direction for continuation (e.g., 'introduce a new character')"
+    )
+    temperature: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.5,
+        description="Override temperature (default: 0.85 for creative writing)"
+    )
+    stream: bool = Field(
+        default=False,
+        description="Whether to stream the response (SSE)"
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "text": "Sarah opened the ancient book carefully. The pages were yellowed with age, and strange symbols covered every inch. As she traced her finger along one of the markings, it began to glow.",
+                "word_target": 150,
+                "custom_instruction": "Build tension",
+                "stream": False
+            }
+        }
+
+
+class ContextInfo(BaseModel):
+    """Context information used for continuation"""
+    characters: List[str] = Field(default=[], description="Characters identified")
+    setting: str = Field(default="", description="Setting description")
+    themes: List[str] = Field(default=[], description="Themes identified")
+    genre: str = Field(default="", description="Genre hint")
+
+
+class StoryContinueResponse(BaseModel):
+    """Response model for story continuation (non-streaming)"""
+    success: bool = Field(..., description="Whether continuation was successful")
+    continuation: str = Field(default="", description="Generated continuation")
+    context: ContextInfo = Field(default=None, description="Context used for generation")
+    pov: str = Field(..., description="POV used")
+    tense: str = Field(..., description="Tense used")
+    tone: str = Field(..., description="Tone used")
+    generation_time_ms: float = Field(default=0.0, description="Generation time in ms")
+    tokens_generated: int = Field(default=0, description="Number of tokens generated")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+
+
+class ContinuationOptionInfo(BaseModel):
+    """Single continuation option"""
+    text: str = Field(..., description="Continuation text")
+    direction: str = Field(..., description="Direction type (action, dialogue, description, twist)")
+    confidence: float = Field(default=0.8, description="Confidence score")
+
+
+class StoryContinueOptionsRequest(BaseModel):
+    """Request model for multiple continuation options"""
+    text: str = Field(..., min_length=10, max_length=50000, description="Story text")
+    num_options: int = Field(
+        default=3,
+        ge=2,
+        le=4,
+        description="Number of options to generate"
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "text": "The detective stared at the crime scene photos. Something didn't add up.",
+                "num_options": 3
+            }
+        }
+
+
+class StoryContinueOptionsResponse(BaseModel):
+    """Response model for multiple continuation options"""
+    success: bool = Field(..., description="Whether generation was successful")
+    options: List[ContinuationOptionInfo] = Field(default=[], description="Continuation options")
+    context: ContextInfo = Field(default=None, description="Context used")
+    generation_time_ms: float = Field(default=0.0, description="Total generation time")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
