@@ -399,3 +399,132 @@ class StyleTransformResponse(BaseModel):
     )
     generation_time_ms: float = Field(default=0.0, description="Processing time in ms")
     error: Optional[str] = Field(default=None, description="Error message if failed")
+
+
+# ==================== Story Continuation Models (Phase 4) ====================
+
+class StoryAnalyzeRequest(BaseModel):
+    """Request model for story analysis"""
+    text: str = Field(..., min_length=10, max_length=50000, description="Story text to analyze")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "text": "The old wizard sat alone in his tower, watching the storm gather over the mountains. Something was coming—he could feel it in his bones."
+            }
+        }
+
+
+class CharacterInfo(BaseModel):
+    """Character information"""
+    name: str
+    mentions: int
+    is_protagonist: bool = False
+
+
+class StoryAnalyzeResponse(BaseModel):
+    """Response model for story analysis"""
+    success: bool = Field(..., description="Whether analysis was successful")
+    pov: str = Field(..., description="Point of view (first_person, third_person_limited, etc.)")
+    tense: str = Field(..., description="Narrative tense (past, present, mixed)")
+    tone: str = Field(..., description="Narrative tone (serious, humorous, suspenseful, etc.)")
+    genre_hint: str = Field(..., description="Detected genre hint")
+    characters: List[CharacterInfo] = Field(default=[], description="Extracted characters")
+    themes: List[str] = Field(default=[], description="Detected themes")
+    setting: str = Field(default="", description="Setting description")
+    recent_events: List[str] = Field(default=[], description="Recent events from story")
+    word_count: int = Field(default=0, description="Total word count")
+    plot_element_count: int = Field(default=0, description="Number of plot elements detected")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+
+
+class StoryContinueRequest(BaseModel):
+    """Request model for story continuation"""
+    text: str = Field(..., min_length=10, max_length=50000, description="Story text to continue")
+    word_target: int = Field(
+        default=150,
+        ge=50,
+        le=500,
+        description="Target word count for continuation"
+    )
+    custom_instruction: str = Field(
+        default="",
+        max_length=500,
+        description="Optional direction for continuation (e.g., 'introduce a new character')"
+    )
+    temperature: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.5,
+        description="Override temperature (default: 0.85 for creative writing)"
+    )
+    stream: bool = Field(
+        default=False,
+        description="Whether to stream the response (SSE)"
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "text": "Sarah opened the ancient book carefully. The pages were yellowed with age, and strange symbols covered every inch. As she traced her finger along one of the markings, it began to glow.",
+                "word_target": 150,
+                "custom_instruction": "Build tension",
+                "stream": False
+            }
+        }
+
+
+class ContextInfo(BaseModel):
+    """Context information used for continuation"""
+    characters: List[str] = Field(default=[], description="Characters identified")
+    setting: str = Field(default="", description="Setting description")
+    themes: List[str] = Field(default=[], description="Themes identified")
+    genre: str = Field(default="", description="Genre hint")
+
+
+class StoryContinueResponse(BaseModel):
+    """Response model for story continuation (non-streaming)"""
+    success: bool = Field(..., description="Whether continuation was successful")
+    continuation: str = Field(default="", description="Generated continuation")
+    context: ContextInfo = Field(default=None, description="Context used for generation")
+    pov: str = Field(..., description="POV used")
+    tense: str = Field(..., description="Tense used")
+    tone: str = Field(..., description="Tone used")
+    generation_time_ms: float = Field(default=0.0, description="Generation time in ms")
+    tokens_generated: int = Field(default=0, description="Number of tokens generated")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+
+
+class ContinuationOptionInfo(BaseModel):
+    """Single continuation option"""
+    text: str = Field(..., description="Continuation text")
+    direction: str = Field(..., description="Direction type (action, dialogue, description, twist)")
+    confidence: float = Field(default=0.8, description="Confidence score")
+
+
+class StoryContinueOptionsRequest(BaseModel):
+    """Request model for multiple continuation options"""
+    text: str = Field(..., min_length=10, max_length=50000, description="Story text")
+    num_options: int = Field(
+        default=3,
+        ge=2,
+        le=4,
+        description="Number of options to generate"
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "text": "The detective stared at the crime scene photos. Something didn't add up.",
+                "num_options": 3
+            }
+        }
+
+
+class StoryContinueOptionsResponse(BaseModel):
+    """Response model for multiple continuation options"""
+    success: bool = Field(..., description="Whether generation was successful")
+    options: List[ContinuationOptionInfo] = Field(default=[], description="Continuation options")
+    context: ContextInfo = Field(default=None, description="Context used")
+    generation_time_ms: float = Field(default=0.0, description="Total generation time")
+    error: Optional[str] = Field(default=None, description="Error message if failed")

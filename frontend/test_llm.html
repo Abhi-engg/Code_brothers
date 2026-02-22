@@ -330,7 +330,7 @@
 <body>
     <div class="container">
         <h1>🧪 LLM Enhancement Test Page</h1>
-        <p class="subtitle">Test Ollama LLM integration for writing improvements (Phase 2)</p>
+        <p class="subtitle">Test Ollama LLM integration for writing improvements (Phases 2-4)</p>
         
         <!-- Status Bar -->
         <div class="status-bar">
@@ -537,6 +537,133 @@
                         <button class="example-btn" onclick="loadStyleExample('technical')">Technical → Casual</button>
                         <button class="example-btn" onclick="loadStyleExample('plain')">Plain → Creative</button>
                         <button class="example-btn" onclick="loadStyleExample('news')">News → Narrative</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Story Continuation Section (Phase 4) -->
+        <div class="card" style="margin-top: 2rem;">
+            <h2>📖 Story Continuation</h2>
+            <p style="color: var(--text-muted); margin-bottom: 1rem; font-size: 0.875rem;">
+                Continue your story with AI that matches your writing style, POV, and tone (Phase 4)
+            </p>
+            
+            <div class="grid">
+                <!-- Input Side -->
+                <div>
+                    <div class="form-group">
+                        <label for="storyText">Story Text</label>
+                        <textarea id="storyText" rows="8" placeholder="Enter your story text...">The old lighthouse keeper had seen many storms, but none like this. The waves crashed against the rocks with a fury that made the tower shudder. Sarah gripped the railing, her knuckles white. 
+
+"We need to get to higher ground," she said, but her voice was lost in the howling wind.
+
+Marcus nodded, understanding without hearing. He grabbed the emergency kit and pointed toward the upper level. They had maybe ten minutes before the surge hit.</textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="wordTarget">Word Target</label>
+                        <input type="number" id="wordTarget" value="150" min="50" max="500" step="25">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="customInstruction">Direction (optional)</label>
+                        <input type="text" id="customInstruction" placeholder="e.g., 'Build tension' or 'Introduce a twist'">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Mode</label>
+                        <div style="display: flex; gap: 1rem; margin-top: 0.5rem;">
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="radio" name="storyMode" value="normal" checked> 
+                                <span>Normal (Complete response)</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="radio" name="storyMode" value="stream"> 
+                                <span>Stream (Real-time tokens)</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 0.5rem;">
+                        <button onclick="analyzeStory()" id="analyzeBtn" class="btn-secondary">
+                            <span id="analyzeBtnText">Analyze</span>
+                            <span class="loading hidden" id="analyzeLoading"></span>
+                        </button>
+                        <button onclick="continueStory()" id="continueBtn">
+                            <span id="continueBtnText">Continue Story</span>
+                            <span class="loading hidden" id="continueLoading"></span>
+                        </button>
+                        <button onclick="generateOptions()" id="optionsBtn" class="btn-secondary">
+                            <span id="optionsBtnText">Get Options</span>
+                            <span class="loading hidden" id="optionsLoading"></span>
+                        </button>
+                    </div>
+                    
+                    <!-- Story Analysis Result -->
+                    <div id="storyAnalysis" class="hidden" style="margin-top: 1rem;">
+                        <div class="result-box">
+                            <div class="result-label">Story Analysis</div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.5rem;">
+                                <div><strong>POV:</strong> <span id="analysisPov">-</span></div>
+                                <div><strong>Tense:</strong> <span id="analysisTense">-</span></div>
+                                <div><strong>Tone:</strong> <span id="analysisTone">-</span></div>
+                                <div><strong>Genre:</strong> <span id="analysisGenre">-</span></div>
+                            </div>
+                            <div style="margin-top: 0.5rem;">
+                                <strong>Characters:</strong> <span id="analysisCharacters">-</span>
+                            </div>
+                            <div style="margin-top: 0.25rem;">
+                                <strong>Themes:</strong> <span id="analysisThemes">-</span>
+                            </div>
+                            <div style="margin-top: 0.25rem;">
+                                <strong>Setting:</strong> <span id="analysisSetting">-</span>
+                            </div>
+                            <div style="margin-top: 0.25rem; font-size: 0.875rem; color: var(--text-muted);">
+                                <span id="analysisWordCount">0</span> words, <span id="analysisPlotElements">0</span> plot elements
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Output Side -->
+                <div>
+                    <!-- Continuation Result -->
+                    <div id="storyResult" class="hidden">
+                        <div class="result-box" id="storyResultBox">
+                            <div class="result-label">Continuation</div>
+                            <div class="result-text" id="continuationText" style="white-space: pre-wrap; min-height: 100px;"></div>
+                            
+                            <div class="result-meta" style="margin-top: 1rem;">
+                                <span>POV: <span id="resultPov">-</span></span>
+                                <span>Tense: <span id="resultTense">-</span></span>
+                                <span>Tone: <span id="resultTone">-</span></span>
+                            </div>
+                            <div class="result-meta">
+                                <span>Tokens: <span id="resultTokens">0</span></span>
+                                <span>Time: <span id="resultTime">0ms</span></span>
+                            </div>
+                        </div>
+                        
+                        <div class="actions">
+                            <button onclick="copyContinuation()" class="btn-copy btn-secondary">Copy</button>
+                            <button onclick="appendToStory()" class="btn-copy">Append to Story</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Options Result -->
+                    <div id="optionsResult" class="hidden" style="margin-top: 1rem;">
+                        <div class="result-label">Continuation Options</div>
+                        <div id="optionsList"></div>
+                    </div>
+                    
+                    <!-- Story Examples -->
+                    <div style="margin-top: 1rem;">
+                        <div style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 0.5rem;">Quick Examples:</div>
+                        <button class="example-btn" onclick="loadStoryExample('fantasy')">Fantasy</button>
+                        <button class="example-btn" onclick="loadStoryExample('thriller')">Thriller</button>
+                        <button class="example-btn" onclick="loadStoryExample('romance')">Romance</button>
+                        <button class="example-btn" onclick="loadStoryExample('scifi')">Sci-Fi</button>
                     </div>
                 </div>
             </div>
@@ -956,6 +1083,354 @@
             document.getElementById('styleText').value = text;
             document.getElementById('styleResult').classList.add('hidden');
             log('Using transformed text as new input');
+        }
+        
+        // ==================== Story Continuation (Phase 4) ====================
+        
+        const STORY_EXAMPLES = {
+            fantasy: {
+                text: `The ancient tome glowed with an otherworldly light as Elena traced the runes with trembling fingers. The library had been abandoned for centuries, yet she could feel eyes watching her from the shadows.
+
+"The spell requires blood," whispered the voice in her head—the same voice that had guided her here.
+
+She pulled out the silver dagger, its blade etched with symbols that matched those in the book. One cut. That's all it would take to open the gateway.`
+            },
+            thriller: {
+                text: `Detective Morgan stared at the crime scene photos spread across his desk. Three victims. Three weeks. Same MO.
+
+The killer left no forensic evidence, just a calling card—a single white chess piece placed on each body. A knight.
+
+His phone buzzed. Unknown number.
+
+"You're getting close, Detective. But not close enough. Would you like a hint?"
+
+Morgan's blood ran cold. How did the killer get his private number?`
+            },
+            romance: {
+                text: `The coffee shop was crowded, but Emma spotted him immediately—the same dark-haired stranger who'd caught her umbrella when the wind tore it from her hands last week.
+
+He looked up from his laptop, and their eyes met. A slight smile crossed his face.
+
+"The chair across from me is free," he said, gesturing. "If you're looking for a seat."
+
+Her heart did something ridiculous in her chest. This was not how these things happened in real life.`
+            },
+            scifi: {
+                text: `The colony ship Aurora had been drifting for three hundred years when Commander Chen found the anomaly.
+
+"It's not on any charts," Lieutenant Park said, studying the holographic display. "A planet, Class-M atmosphere, but there shouldn't be anything here."
+
+Chen zoomed in on the surface scan. Cities. Massive structures that defied physics.
+
+"We're not alone," she whispered. "We were never alone."
+
+The ship's AI interrupted: "Commander, we're being scanned. Something is waking up down there."`
+            }
+        };
+        
+        function loadStoryExample(name) {
+            const ex = STORY_EXAMPLES[name];
+            if (ex) {
+                document.getElementById('storyText').value = ex.text;
+                document.getElementById('storyAnalysis').classList.add('hidden');
+                document.getElementById('storyResult').classList.add('hidden');
+                document.getElementById('optionsResult').classList.add('hidden');
+                log(`Loaded story example: ${name}`);
+            }
+        }
+        
+        async function analyzeStory() {
+            const btn = document.getElementById('analyzeBtn');
+            const btnText = document.getElementById('analyzeBtnText');
+            const loading = document.getElementById('analyzeLoading');
+            const resultDiv = document.getElementById('storyAnalysis');
+            
+            const text = document.getElementById('storyText').value.trim();
+            
+            if (!text) {
+                alert('Please enter story text to analyze');
+                return;
+            }
+            
+            btn.disabled = true;
+            btnText.textContent = 'Analyzing...';
+            loading.classList.remove('hidden');
+            
+            log(`Analyzing story: ${text.substring(0, 50)}...`);
+            
+            try {
+                const response = await fetch(`${API_BASE}/story/analyze`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: text })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('analysisPov').textContent = data.pov.replace(/_/g, ' ');
+                    document.getElementById('analysisTense').textContent = data.tense;
+                    document.getElementById('analysisTone').textContent = data.tone;
+                    document.getElementById('analysisGenre').textContent = data.genre_hint;
+                    document.getElementById('analysisCharacters').textContent = 
+                        data.characters.length > 0 
+                            ? data.characters.map(c => `${c.name} (${c.mentions}x${c.is_protagonist ? ', protagonist' : ''})`).join(', ')
+                            : 'None detected';
+                    document.getElementById('analysisThemes').textContent = 
+                        data.themes.length > 0 ? data.themes.join(', ') : 'None detected';
+                    document.getElementById('analysisSetting').textContent = data.setting || 'Not described';
+                    document.getElementById('analysisWordCount').textContent = data.word_count;
+                    document.getElementById('analysisPlotElements').textContent = data.plot_element_count;
+                    
+                    resultDiv.classList.remove('hidden');
+                    log(`Analysis complete: ${data.pov}, ${data.tense}, ${data.tone}`);
+                } else {
+                    log(`Analysis failed: ${data.error}`);
+                    alert('Analysis failed: ' + (data.error || 'Unknown error'));
+                }
+                
+            } catch (e) {
+                log(`Analysis ERROR: ${e.message}`);
+                alert('Analysis failed: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btnText.textContent = 'Analyze';
+                loading.classList.add('hidden');
+            }
+        }
+        
+        async function continueStory() {
+            const btn = document.getElementById('continueBtn');
+            const btnText = document.getElementById('continueBtnText');
+            const loading = document.getElementById('continueLoading');
+            const resultDiv = document.getElementById('storyResult');
+            const continuationText = document.getElementById('continuationText');
+            
+            const text = document.getElementById('storyText').value.trim();
+            const wordTarget = parseInt(document.getElementById('wordTarget').value) || 150;
+            const customInstruction = document.getElementById('customInstruction').value.trim();
+            const mode = document.querySelector('input[name="storyMode"]:checked').value;
+            
+            if (!text) {
+                alert('Please enter story text to continue');
+                return;
+            }
+            
+            btn.disabled = true;
+            loading.classList.remove('hidden');
+            resultDiv.classList.remove('hidden');
+            document.getElementById('optionsResult').classList.add('hidden');
+            
+            log(`Continuing story (${mode} mode, ${wordTarget} words)...`);
+            
+            if (mode === 'stream') {
+                // SSE Streaming mode
+                btnText.textContent = 'Streaming...';
+                continuationText.textContent = '';
+                
+                try {
+                    const response = await fetch(`${API_BASE}/story/continue`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            text: text,
+                            word_target: wordTarget,
+                            custom_instruction: customInstruction,
+                            stream: true
+                        })
+                    });
+                    
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = '';
+                    let fullText = '';
+                    
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop(); // Keep incomplete line in buffer
+                        
+                        for (const line of lines) {
+                            if (line.startsWith('event: ')) {
+                                const eventType = line.slice(7);
+                                continue;
+                            }
+                            if (line.startsWith('data: ')) {
+                                try {
+                                    const data = JSON.parse(line.slice(6));
+                                    
+                                    if (data.token) {
+                                        fullText += data.token;
+                                        continuationText.textContent = fullText;
+                                    } else if (data.pov) {
+                                        // Context event
+                                        document.getElementById('resultPov').textContent = data.pov.replace(/_/g, ' ');
+                                        document.getElementById('resultTense').textContent = data.tense;
+                                        document.getElementById('resultTone').textContent = data.tone;
+                                    } else if (data.generation_time_ms) {
+                                        // Done event
+                                        document.getElementById('resultTokens').textContent = data.tokens_generated;
+                                        document.getElementById('resultTime').textContent = `${data.generation_time_ms.toFixed(0)}ms`;
+                                        log(`Stream complete: ${data.tokens_generated} tokens in ${data.generation_time_ms.toFixed(0)}ms`);
+                                    }
+                                } catch (e) {
+                                    // Ignore parse errors
+                                }
+                            }
+                        }
+                    }
+                    
+                    document.getElementById('storyResultBox').className = 'result-box success';
+                    
+                } catch (e) {
+                    log(`Stream ERROR: ${e.message}`);
+                    continuationText.textContent = `Error: ${e.message}`;
+                    document.getElementById('storyResultBox').className = 'result-box error';
+                }
+                
+            } else {
+                // Normal (non-streaming) mode
+                btnText.textContent = 'Generating...';
+                continuationText.textContent = 'Generating continuation...';
+                
+                try {
+                    const response = await fetch(`${API_BASE}/story/continue`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            text: text,
+                            word_target: wordTarget,
+                            custom_instruction: customInstruction,
+                            stream: false
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    continuationText.textContent = data.continuation || '(No continuation generated)';
+                    document.getElementById('resultPov').textContent = data.pov?.replace(/_/g, ' ') || '-';
+                    document.getElementById('resultTense').textContent = data.tense || '-';
+                    document.getElementById('resultTone').textContent = data.tone || '-';
+                    document.getElementById('resultTokens').textContent = data.tokens_generated || 0;
+                    document.getElementById('resultTime').textContent = `${data.generation_time_ms?.toFixed(0) || 0}ms`;
+                    
+                    document.getElementById('storyResultBox').className = `result-box ${data.success ? 'success' : 'error'}`;
+                    
+                    log(`Continuation ${data.success ? 'SUCCESS' : 'FAILED'}: ${data.tokens_generated} tokens in ${data.generation_time_ms?.toFixed(0)}ms`);
+                    
+                } catch (e) {
+                    log(`Continuation ERROR: ${e.message}`);
+                    continuationText.textContent = `Error: ${e.message}`;
+                    document.getElementById('storyResultBox').className = 'result-box error';
+                }
+            }
+            
+            btn.disabled = false;
+            btnText.textContent = 'Continue Story';
+            loading.classList.add('hidden');
+        }
+        
+        async function generateOptions() {
+            const btn = document.getElementById('optionsBtn');
+            const btnText = document.getElementById('optionsBtnText');
+            const loading = document.getElementById('optionsLoading');
+            const resultDiv = document.getElementById('optionsResult');
+            const optionsList = document.getElementById('optionsList');
+            
+            const text = document.getElementById('storyText').value.trim();
+            
+            if (!text) {
+                alert('Please enter story text');
+                return;
+            }
+            
+            btn.disabled = true;
+            btnText.textContent = 'Generating...';
+            loading.classList.remove('hidden');
+            document.getElementById('storyResult').classList.add('hidden');
+            
+            log('Generating continuation options...');
+            
+            try {
+                const response = await fetch(`${API_BASE}/story/options`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        text: text,
+                        num_options: 3
+                    })
+                });
+                
+                const data = await response.json();
+                
+                optionsList.innerHTML = '';
+                
+                if (data.success && data.options.length > 0) {
+                    data.options.forEach((opt, i) => {
+                        const div = document.createElement('div');
+                        div.className = 'result-box';
+                        div.style.marginTop = '0.5rem';
+                        div.style.cursor = 'pointer';
+                        div.innerHTML = `
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-size: 0.75rem; color: var(--primary); text-transform: uppercase;">
+                                    ${i + 1}. ${opt.direction}
+                                </span>
+                                <button class="btn-copy" onclick="useOption(${i})" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;">
+                                    Use This
+                                </button>
+                            </div>
+                            <div style="margin-top: 0.5rem;">${opt.text}</div>
+                        `;
+                        optionsList.appendChild(div);
+                    });
+                    
+                    // Store options for use
+                    window.continuationOptions = data.options;
+                    
+                    resultDiv.classList.remove('hidden');
+                    log(`Generated ${data.options.length} options in ${data.generation_time_ms?.toFixed(0)}ms`);
+                } else {
+                    log(`Options generation failed: ${data.error || 'No options returned'}`);
+                    alert('Failed to generate options: ' + (data.error || 'Unknown error'));
+                }
+                
+            } catch (e) {
+                log(`Options ERROR: ${e.message}`);
+                alert('Options generation failed: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btnText.textContent = 'Get Options';
+                loading.classList.add('hidden');
+            }
+        }
+        
+        function useOption(index) {
+            if (window.continuationOptions && window.continuationOptions[index]) {
+                const opt = window.continuationOptions[index];
+                document.getElementById('continuationText').textContent = opt.text;
+                document.getElementById('storyResult').classList.remove('hidden');
+                document.getElementById('storyResultBox').className = 'result-box success';
+                document.getElementById('optionsResult').classList.add('hidden');
+                log(`Selected option ${index + 1}: ${opt.direction}`);
+            }
+        }
+        
+        function copyContinuation() {
+            const text = document.getElementById('continuationText').textContent;
+            navigator.clipboard.writeText(text);
+            log('Copied continuation to clipboard');
+        }
+        
+        function appendToStory() {
+            const continuation = document.getElementById('continuationText').textContent;
+            const storyText = document.getElementById('storyText');
+            storyText.value = storyText.value.trim() + '\n\n' + continuation;
+            document.getElementById('storyResult').classList.add('hidden');
+            log('Appended continuation to story');
         }
     </script>
 </body>

@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from backend.models import (
@@ -30,7 +30,17 @@ from backend.models import (
     BatchRewriteRequest,
     BatchRewriteResponse,
     StyleTransformRequest,
-    StyleTransformResponse
+    StyleTransformResponse,
+    # Story continuation models (Phase 4)
+    StoryAnalyzeRequest,
+    StoryAnalyzeResponse,
+    CharacterInfo,
+    StoryContinueRequest,
+    StoryContinueResponse,
+    ContextInfo,
+    StoryContinueOptionsRequest,
+    StoryContinueOptionsResponse,
+    ContinuationOptionInfo
 )
 
 # Import the NLP engine
@@ -39,6 +49,9 @@ from nlp_engine import WritingAssistant, analyze_text, NarrativeConsistencyAnaly
 # Import LLM client and enhancer
 from nlp_engine.llm_client import get_client as get_llm_client, check_ollama_status
 from nlp_engine.llm_enhancer import get_enhancer as get_llm_enhancer
+
+# Import story assistant (Phase 4)
+from nlp_engine.story_assistant import get_story_assistant, analyze_story as analyze_story_context
 
 # Global instances (loaded once)
 assistant: Optional[WritingAssistant] = None
@@ -649,6 +662,248 @@ async def transform_style_endpoint(request: StyleTransformRequest):
             mode=request.mode.value,
             changes_summary="",
             confidence=0.0,
+            error=str(e)
+        )
+
+
+# ==================== Story Continuation Endpoints (Phase 4) ====================
+
+@app.post("/story/analyze", response_model=StoryAnalyzeResponse, tags=["Story Continuation"])
+async def analyze_story_endpoint(request: StoryAnalyzeRequest):
+    """
+    Analyze story text to extract narrative context.
+    
+    Extracts:
+    - Point of view (first person, third person, etc.)
+    - Tense (past, present, mixed)
+    - Tone (serious, humorous, suspenseful, etc.)
+    - Genre hints
+    - Characters and their mentions
+    - Themes
+    - Setting description
+    - Recent events
+    
+    This analysis is used by the continuation endpoint to maintain consistency.
+    All extraction logic is custom-built using pattern matching and NLP.
+    """
+    try:
+        result = analyze_story_context(request.text)
+        
+        return StoryAnalyzeResponse(
+            success=True,
+            pov=result["pov"],
+            tense=result["tense"],
+            tone=result["tone"],
+            genre_hint=result["genre_hint"],
+            characters=[
+                CharacterInfo(
+                    name=c["name"],
+                    mentions=c["mentions"],
+                    is_protagonist=c["is_protagonist"]
+                )
+                for c in result["characters"]
+            ],
+            themes=result["themes"],
+            setting=result["setting"],
+            recent_events=result["recent_events"],
+            word_count=result["word_count"],
+            plot_element_count=result["plot_element_count"]
+        )
+        
+    except Exception as e:
+        return StoryAnalyzeResponse(
+            success=False,
+            pov="unknown",
+            tense="unknown",
+            tone="unknown",
+            genre_hint="unknown",
+            error=str(e)
+        )
+
+
+@app.post("/story/continue", tags=["Story Continuation"])
+async def continue_story_endpoint(request: StoryContinueRequest):
+    """
+    Continue a story using LLM.
+    
+    Two modes:
+    - **Non-streaming** (stream=false): Returns complete continuation
+    - **Streaming** (stream=true): Returns Server-Sent Events (SSE) stream
+    
+    The endpoint:
+    1. Analyzes the story context (POV, tense, tone, characters)
+    2. Builds a custom prompt with all context
+    3. Generates continuation matching the original style
+    
+    For SSE streaming, connect with EventSource and handle 'token' events.
+    
+    Custom-built components:
+    - Context extraction and analysis
+    - Prompt engineering for style matching
+    - Response cleaning and validation
+    
+    External: Ollama LLM for text generation only.
+    """
+    import time
+    import json
+    
+    if request.stream:
+        # SSE Streaming response
+        async def generate_sse():
+            """Generate SSE events for streaming continuation"""
+            start_time = time.time()
+            tokens_generated = 0
+            full_text = ""
+            
+            try:
+                story_assistant = get_story_assistant()
+                context = story_assistant.analyze_story(request.text)
+                
+                # Send initial context event
+                context_data = {
+                    "pov": context.pov.value,
+                    "tense": context.tense.value,
+                    "tone": context.tone.value,
+                    "characters": [c.name for c in context.characters[:5]]
+                }
+                yield f"event: context\ndata: {json.dumps(context_data)}\n\n"
+                
+                # Stream tokens
+                async for token in story_assistant.continue_story_stream_async(
+                    text=request.text,
+                    word_target=request.word_target,
+                    custom_instruction=request.custom_instruction,
+                    context=context,
+                    temperature=request.temperature
+                ):
+                    tokens_generated += 1
+                    full_text += token
+                    yield f"event: token\ndata: {json.dumps({'token': token})}\n\n"
+                
+                # Send completion event
+                elapsed_ms = (time.time() - start_time) * 1000
+                completion_data = {
+                    "success": True,
+                    "generation_time_ms": elapsed_ms,
+                    "tokens_generated": tokens_generated,
+                    "full_text": full_text
+                }
+                yield f"event: done\ndata: {json.dumps(completion_data)}\n\n"
+                
+            except Exception as e:
+                error_data = {"success": False, "error": str(e)}
+                yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
+        
+        return StreamingResponse(
+            generate_sse(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"
+            }
+        )
+    
+    else:
+        # Non-streaming response
+        start_time = time.time()
+        
+        try:
+            story_assistant = get_story_assistant()
+            result = await story_assistant.continue_story_async(
+                text=request.text,
+                word_target=request.word_target,
+                custom_instruction=request.custom_instruction,
+                temperature=request.temperature
+            )
+            
+            return StoryContinueResponse(
+                success=result.success,
+                continuation=result.continuation,
+                context=ContextInfo(
+                    characters=result.context_used.get("characters", []),
+                    setting=result.context_used.get("setting", ""),
+                    themes=result.context_used.get("themes", []),
+                    genre=result.context_used.get("genre", "")
+                ),
+                pov=result.pov,
+                tense=result.tense,
+                tone=result.tone,
+                generation_time_ms=result.generation_time_ms,
+                tokens_generated=result.tokens_generated,
+                error=result.error
+            )
+            
+        except Exception as e:
+            return StoryContinueResponse(
+                success=False,
+                continuation="",
+                context=ContextInfo(),
+                pov="unknown",
+                tense="unknown",
+                tone="unknown",
+                generation_time_ms=(time.time() - start_time) * 1000,
+                tokens_generated=0,
+                error=str(e)
+            )
+
+
+@app.post("/story/options", response_model=StoryContinueOptionsResponse, tags=["Story Continuation"])
+async def continue_story_options_endpoint(request: StoryContinueOptionsRequest):
+    """
+    Generate multiple continuation options for user to choose from.
+    
+    Options typically include different directions:
+    1. **Action/plot advancement** - Move the story forward
+    2. **Character development/dialogue** - Deepen character interactions
+    3. **Atmospheric/descriptive** - Build mood and setting
+    4. **Plot twist** (if 4 options requested) - Unexpected development
+    
+    This gives writers creative choices while maintaining story consistency.
+    
+    Custom-built: Option categorization and prompt assembly.
+    External: Ollama LLM for generation.
+    """
+    import time
+    start_time = time.time()
+    
+    try:
+        story_assistant = get_story_assistant()
+        context = story_assistant.analyze_story(request.text)
+        options = story_assistant.generate_continuation_options(
+            text=request.text,
+            num_options=request.num_options,
+            context=context
+        )
+        
+        elapsed_ms = (time.time() - start_time) * 1000
+        
+        return StoryContinueOptionsResponse(
+            success=len(options) > 0,
+            options=[
+                ContinuationOptionInfo(
+                    text=opt.text,
+                    direction=opt.direction,
+                    confidence=opt.confidence
+                )
+                for opt in options
+            ],
+            context=ContextInfo(
+                characters=[c.name for c in context.characters[:5]],
+                setting=context.setting_description,
+                themes=context.themes,
+                genre=context.genre_hint.value
+            ),
+            generation_time_ms=elapsed_ms,
+            error=None if options else "Failed to generate options"
+        )
+        
+    except Exception as e:
+        return StoryContinueOptionsResponse(
+            success=False,
+            options=[],
+            context=ContextInfo(),
+            generation_time_ms=(time.time() - start_time) * 1000,
             error=str(e)
         )
 
