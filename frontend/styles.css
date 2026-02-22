@@ -585,11 +585,12 @@ select, input { font-family: inherit; }
 .mm-layout { display: flex; gap: 14px; min-height: 420px; }
 .mm-graph-wrap { flex: 1; position: relative; display: flex; flex-direction: column; }
 .mm-network {
-    flex: 1; min-height: 400px;
+    flex: 1; min-height: 400px; width: 100%;
     border: 1.5px solid var(--wc-border);
     border-radius: var(--wc-radius);
     background: linear-gradient(135deg, #0F172A, #1E293B, #0F172A);
     overflow: hidden;
+    position: relative;
 }
 .mm-hint { text-align: center; font-size: 0.68rem; color: var(--wc-text-muted); margin-top: 4px; }
 .mm-toolbar-btn {

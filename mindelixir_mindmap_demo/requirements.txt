@@ -1,0 +1,7 @@
+fastapi>=0.85.0
+uvicorn[standard]>=0.18.0
+keybert>=0.7.0
+sentence-transformers>=2.2.2
+spacy>=3.5.0
+# Remember to download the spaCy model:
+# python -m spacy download en_core_web_sm

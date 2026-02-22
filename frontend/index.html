@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,9 +8,16 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
     <link rel="stylesheet" href="styles.css">
+    <!-- MindElixir CDN -->
+    <script type="module">
+        import MindElixir from 'https://unpkg.com/mind-elixir?module';
+        window.MindElixir = MindElixir;
+    </script>
+    <script src="app.js"></script>
 </head>
+
 <body>
     <div class="wc-app">
         <!-- ── Top Bar ──────────────────────────────────── -->
@@ -25,9 +33,11 @@
                     Checking...
                 </span>
                 <button id="settings-toggle" class="wc-icon-btn" title="Settings">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="3"/>
-                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="3" />
+                        <path
+                            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
                     </svg>
                 </button>
             </div>
@@ -62,10 +72,12 @@ Press Ctrl+Enter to analyze."></textarea>
                 <div id="empty-state" class="wc-empty">
                     <div class="wc-empty-illustration">✏️</div>
                     <h2>Welcome to WriteCraft</h2>
-                    <p>Enter or paste text on the left, then click <strong>Analyze</strong> to unlock comprehensive writing insights.</p>
+                    <p>Enter or paste text on the left, then click <strong>Analyze</strong> to unlock comprehensive
+                        writing insights.</p>
                     <div class="wc-empty-features">
                         <span>✍️ Annotations</span><span>🔤 Grammar</span><span>🎨 Style & Tone</span>
-                        <span>📖 Narrative</span><span>💡 Insights</span><span>🚫 Anti-Patterns</span><span>🎯 Improve</span>
+                        <span>📖 Narrative</span><span>💡 Insights</span><span>🚫 Anti-Patterns</span><span>🎯
+                            Improve</span>
                     </div>
                 </div>
 
@@ -76,22 +88,30 @@ Press Ctrl+Enter to analyze."></textarea>
                         <div class="wc-score-item wc-score-primary">
                             <span class="wc-score-label">Overall</span>
                             <span id="score-overall" class="wc-score-value">--</span>
-                            <div class="wc-score-track"><div id="score-overall-bar" class="wc-score-fill"></div></div>
+                            <div class="wc-score-track">
+                                <div id="score-overall-bar" class="wc-score-fill"></div>
+                            </div>
                         </div>
                         <div class="wc-score-item">
                             <span class="wc-score-label">Readability</span>
                             <span id="score-readability" class="wc-score-value">--</span>
-                            <div class="wc-score-track"><div id="score-readability-bar" class="wc-score-fill"></div></div>
+                            <div class="wc-score-track">
+                                <div id="score-readability-bar" class="wc-score-fill"></div>
+                            </div>
                         </div>
                         <div class="wc-score-item">
                             <span class="wc-score-label">Flow</span>
                             <span id="score-flow" class="wc-score-value">--</span>
-                            <div class="wc-score-track"><div id="score-flow-bar" class="wc-score-fill"></div></div>
+                            <div class="wc-score-track">
+                                <div id="score-flow-bar" class="wc-score-fill"></div>
+                            </div>
                         </div>
                         <div class="wc-score-item">
                             <span class="wc-score-label">Consistency</span>
                             <span id="score-consistency" class="wc-score-value">--</span>
-                            <div class="wc-score-track"><div id="score-consistency-bar" class="wc-score-fill"></div></div>
+                            <div class="wc-score-track">
+                                <div id="score-consistency-bar" class="wc-score-fill"></div>
+                            </div>
                         </div>
                     </div>
 
@@ -124,13 +144,20 @@ Press Ctrl+Enter to analyze."></textarea>
             <div class="wc-drawer-body">
                 <div class="wc-settings-group">
                     <h4>Analysis Features</h4>
-                    <label class="wc-toggle"><input type="checkbox" id="feat-readability" checked><span>Readability Analysis</span></label>
-                    <label class="wc-toggle"><input type="checkbox" id="feat-flow" checked><span>Flow Analysis</span></label>
-                    <label class="wc-toggle"><input type="checkbox" id="feat-style" checked><span>Style Detection</span></label>
-                    <label class="wc-toggle"><input type="checkbox" id="feat-consistency" checked><span>Consistency Check</span></label>
-                    <label class="wc-toggle"><input type="checkbox" id="feat-mindmap" checked><span>Mind Map</span></label>
-                    <label class="wc-toggle"><input type="checkbox" id="feat-antipatterns" checked><span>Anti-Patterns</span></label>
-                    <label class="wc-toggle"><input type="checkbox" id="feat-transform"><span>Style Transformation</span></label>
+                    <label class="wc-toggle"><input type="checkbox" id="feat-readability" checked><span>Readability
+                            Analysis</span></label>
+                    <label class="wc-toggle"><input type="checkbox" id="feat-flow" checked><span>Flow
+                            Analysis</span></label>
+                    <label class="wc-toggle"><input type="checkbox" id="feat-style" checked><span>Style
+                            Detection</span></label>
+                    <label class="wc-toggle"><input type="checkbox" id="feat-consistency" checked><span>Consistency
+                            Check</span></label>
+                    <label class="wc-toggle"><input type="checkbox" id="feat-mindmap" checked><span>Mind
+                            Map</span></label>
+                    <label class="wc-toggle"><input type="checkbox" id="feat-antipatterns"
+                            checked><span>Anti-Patterns</span></label>
+                    <label class="wc-toggle"><input type="checkbox" id="feat-transform"><span>Style
+                            Transformation</span></label>
                 </div>
                 <div class="wc-settings-group">
                     <h4>Target Style</h4>
@@ -185,4 +212,5 @@ Press Ctrl+Enter to analyze."></textarea>
 
     <script src="app.js"></script>
 </body>
+
 </html>
