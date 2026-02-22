@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Writing Assistant - AI-Powered Writing Analysis</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
     <link rel="stylesheet" href="styles.css">
     <script>
         tailwind.config = {
@@ -84,7 +85,10 @@ Try this example: Dr. Sarah Johnson presented her findings at MIT yesterday. She
                 <div id="results-container" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hidden">
                     <div class="border-b border-gray-200 overflow-x-auto">
                         <nav class="flex -mb-px whitespace-nowrap" id="result-tabs">
-                            <button class="tab-btn active px-4 py-3 text-sm font-medium border-b-2 border-primary text-primary" data-tab="overview">
+                            <button class="tab-btn active px-4 py-3 text-sm font-medium border-b-2 border-primary text-primary" data-tab="write">
+                                ✍️ Write
+                            </button>
+                            <button class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="overview">
                                 📊 Overview
                             </button>
                             <button class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="issues">
@@ -93,11 +97,23 @@ Try this example: Dr. Sarah Johnson presented her findings at MIT yesterday. She
                             <button class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="enhancements">
                                 ✨ Enhanced
                             </button>
+                            <button class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="tone">
+                                🎭 Tone
+                            </button>
                             <button class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="suggestions">
                                 💡 Suggestions
                             </button>
                             <button class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="transform">
                                 🔄 Transform
+                            </button>
+                            <button class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="narrative">
+                                📖 Narrative
+                            </button>
+                            <button class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="mindmap">
+                                🧠 Mind Map
+                            </button>
+                            <button class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="antipatterns">
+                                🚫 Improve
                             </button>
                             <button class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="details">
                                 📋 Details
@@ -140,6 +156,14 @@ Try this example: Dr. Sarah Johnson presented her findings at MIT yesterday. She
                             <input type="checkbox" id="feat-transform" class="w-4 h-4 text-primary rounded focus:ring-primary">
                             <span class="text-sm text-gray-700">Style Transformation</span>
                         </label>
+                        <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="checkbox" id="feat-mindmap" checked class="w-4 h-4 text-primary rounded focus:ring-primary">
+                            <span class="text-sm text-gray-700">🧠 Mind Map</span>
+                        </label>
+                        <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="checkbox" id="feat-antipatterns" checked class="w-4 h-4 text-primary rounded focus:ring-primary">
+                            <span class="text-sm text-gray-700">🚫 Anti-Patterns</span>
+                        </label>
                     </div>
                 </div>
 
@@ -150,9 +174,34 @@ Try this example: Dr. Sarah Johnson presented her findings at MIT yesterday. She
                     </div>
                     <div class="p-4">
                         <select id="target-style" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
-                            <option value="formal">Formal</option>
-                            <option value="casual">Casual</option>
-                            <option value="academic">Academic</option>
+                            <option value="formal">Formal — Professional & polished</option>
+                            <option value="casual">Casual — Relaxed & conversational</option>
+                            <option value="academic">Academic — Scholarly & precise</option>
+                            <option value="creative">Creative — Vivid & expressive</option>
+                            <option value="persuasive">Persuasive — Compelling & action-driven</option>
+                            <option value="journalistic">Journalistic — Clear & concise</option>
+                            <option value="narrative">Narrative — Storytelling & immersive</option>
+                        </select>
+                        <p class="text-xs text-gray-500 mt-2" id="style-description">Enable "Style Transformation" toggle to apply</p>
+                    </div>
+                </div>
+
+                <!-- Tone Selector -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="p-4 border-b border-gray-200 bg-gray-50">
+                        <h2 class="font-semibold text-gray-900">Target Tone</h2>
+                        <p class="text-xs text-gray-500 mt-1">Detect or transform tone</p>
+                    </div>
+                    <div class="p-4">
+                        <select id="target-tone" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            <option value="auto" selected>Auto-detect</option>
+                            <option value="assertive">🔴 Assertive</option>
+                            <option value="empathetic">💗 Empathetic</option>
+                            <option value="persuasive">🟡 Persuasive</option>
+                            <option value="professional">🔵 Professional</option>
+                            <option value="friendly">🟢 Friendly</option>
+                            <option value="urgent">🟠 Urgent</option>
+                            <option value="narrative">🟣 Narrative</option>
                         </select>
                     </div>
                 </div>

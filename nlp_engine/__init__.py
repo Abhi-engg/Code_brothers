@@ -20,8 +20,8 @@ Usage:
     results = analyze_text("Your text here...")
 """
 
-from .test_pipeline import WritingAssistant, analyze_text
-from .consistency_checker import NarrativeConsistencyAnalyzer
+from .pipeline import WritingAssistant, analyze_text
+from .consistency_checker import NarrativeConsistencyAnalyzer, run_narrative_tracker
 
 # Module-level exports for direct access
 from . import text_analyzer
@@ -29,6 +29,9 @@ from . import enhancer
 from . import style_transformer
 from . import consistency_checker
 from . import explanation
+from . import grammar_checker
+from . import concept_extractor
+from . import antipatterns
 
 __all__ = [
     "WritingAssistant",
@@ -38,7 +41,10 @@ __all__ = [
     "enhancer",
     "style_transformer",
     "consistency_checker",
-    "explanation"
+    "explanation",
+    "grammar_checker",
+    "concept_extractor",
+    "antipatterns"
 ]
 
 __version__ = "1.0.0"

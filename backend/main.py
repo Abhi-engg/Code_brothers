@@ -37,14 +37,14 @@ consistency_analyzer: Optional[NarrativeConsistencyAnalyzer] = None
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown"""
     global assistant, consistency_analyzer
-    print("🚀 Starting Writing Assistant API...")
-    print("📚 Loading spaCy model...")
+    print("Starting Writing Assistant API...")
+    print("Loading spaCy model...")
     assistant = WritingAssistant()
     consistency_analyzer = NarrativeConsistencyAnalyzer()
-    print("✅ NLP Engine ready!")
-    print("✅ Narrative Consistency Analyzer ready!")
+    print("NLP Engine ready!")
+    print("Narrative Consistency Analyzer ready!")
     yield
-    print("👋 Shutting down Writing Assistant API...")
+    print("Shutting down Writing Assistant API...")
 
 
 # Create FastAPI app
@@ -140,7 +140,8 @@ async def analyze_endpoint(request: AnalysisRequest):
         config = {
             "long_sentence_threshold": request.long_sentence_threshold,
             "repeated_word_min_count": request.repeated_word_min_count,
-            "target_style": request.target_style.value if request.target_style else "formal"
+            "target_style": request.target_style.value if request.target_style else "formal",
+            "target_tone_value": request.target_tone.value if request.target_tone else "auto"
         }
         
         # Create configured assistant
@@ -171,6 +172,12 @@ async def analyze_endpoint(request: AnalysisRequest):
             suggestions=results.get("suggestions"),
             explanations=results.get("explanations"),
             scores=results.get("scores"),
+            # Grammar analysis
+            grammar_analysis=results.get("grammar_analysis"),
+            # Tone analysis
+            tone_analysis=results.get("tone_analysis"),
+            # Style scores per paragraph
+            style_scores=results.get("style_scores"),
             # New enhanced features
             passive_voice=results.get("passive_voice"),
             sentiment=results.get("sentiment"),
@@ -179,7 +186,15 @@ async def analyze_endpoint(request: AnalysisRequest):
             cliches=results.get("cliches"),
             paragraph_structure=results.get("paragraph_structure"),
             lexical_density=results.get("lexical_density"),
-            sentence_rhythm=results.get("sentence_rhythm")
+            sentence_rhythm=results.get("sentence_rhythm"),
+            # Narrative tracker (Phase 5)
+            narrative_tracker=results.get("narrative_tracker"),
+            # Inline annotations (Phase 6)
+            annotations=results.get("annotations"),
+            # Mind map (Phase 7)
+            mind_map=results.get("mind_map"),
+            # Anti-patterns (Phase 8)
+            antipatterns=results.get("antipatterns"),
         )
         
     except Exception as e:

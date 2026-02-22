@@ -334,7 +334,7 @@ def transform_style(text: str, target_style: str = "formal") -> Dict[str, Any]:
     
     Args:
         text: Input text to transform
-        target_style: Target style ('formal', 'casual', 'academic')
+        target_style: Target style ('formal', 'casual', 'academic', 'creative', 'persuasive', 'journalistic', 'narrative')
         
     Returns:
         Dictionary with transformation results
@@ -353,6 +353,14 @@ def transform_style(text: str, target_style: str = "formal") -> Dict[str, Any]:
         result["changes"].extend(academic_changes["changes"])
         result["change_count"] = len(result["changes"])
         return result
+    elif target_style == "creative":
+        return transform_to_creative(text)
+    elif target_style == "persuasive":
+        return transform_to_persuasive(text)
+    elif target_style == "journalistic":
+        return transform_to_journalistic(text)
+    elif target_style == "narrative":
+        return transform_to_narrative(text)
     else:
         return {
             "original": text,
@@ -754,6 +762,8 @@ def detect_cliches(text: str) -> Dict[str, Any]:
                 found_cliches.append({
                     "cliche": cliche,
                     "position": pos,
+                    "start_offset": pos,
+                    "end_offset": pos + len(cliche),
                     "context": "..." + context + "...",
                     "suggestion": "Consider rephrasing with original language"
                 })
@@ -765,4 +775,906 @@ def detect_cliches(text: str) -> Dict[str, Any]:
         "cliches": found_cliches,
         "severity": "high" if len(found_cliches) > 3 else "medium" if len(found_cliches) > 0 else "none",
         "message": f"Found {len(found_cliches)} overused phrases or clichés" if found_cliches else "No clichés detected"
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Tone Analysis & Transformation
+# ──────────────────────────────────────────────────────────────────────────
+
+# 7 tone archetypes with detection patterns
+TONE_DEFINITIONS = {
+    "assertive": {
+        "label": "Assertive",
+        "description": "Direct, confident, commanding",
+        "color": "#EF4444",
+    },
+    "empathetic": {
+        "label": "Empathetic",
+        "description": "Inclusive, compassionate, understanding",
+        "color": "#EC4899",
+    },
+    "persuasive": {
+        "label": "Persuasive",
+        "description": "Convincing, compelling, motivating",
+        "color": "#F59E0B",
+    },
+    "professional": {
+        "label": "Professional",
+        "description": "Formal, measured, authoritative",
+        "color": "#3B82F6",
+    },
+    "friendly": {
+        "label": "Friendly",
+        "description": "Warm, approachable, conversational",
+        "color": "#10B981",
+    },
+    "urgent": {
+        "label": "Urgent",
+        "description": "Time-sensitive, action-oriented, pressing",
+        "color": "#F97316",
+    },
+    "narrative": {
+        "label": "Narrative",
+        "description": "Descriptive, vivid, story-driven",
+        "color": "#8B5CF6",
+    },
+}
+
+# ── Pattern word-banks ──
+
+_EMPATHETIC_WORDS = {
+    "we", "our", "us", "together", "understand", "feel", "care",
+    "appreciate", "support", "help", "share", "empathy", "compassion",
+    "listen", "comfort", "kindness", "grateful", "team",
+}
+
+_POWER_WORDS = {
+    "proven", "guaranteed", "exclusive", "secret", "ultimate",
+    "revolutionary", "breakthrough", "remarkable", "incredible",
+    "powerful", "extraordinary", "essential", "critical", "undeniable",
+    "unmatched", "transform", "ignite", "unleash", "dominate",
+    "skyrocket", "game-changing", "jaw-dropping", "stunning",
+}
+
+_HEDGE_WORDS = {
+    "perhaps", "possibly", "arguably", "somewhat", "relatively",
+    "generally", "typically", "approximately", "seemingly",
+    "apparently", "ostensibly", "conceivably", "presumably",
+}
+
+_URGENT_WORDS = {
+    "now", "immediately", "urgent", "asap", "hurry", "deadline",
+    "critical", "emergency", "act", "fast", "quick", "rapid",
+    "today", "limited", "expires", "rush", "priority", "alert",
+}
+
+_SENSORY_WORDS = {
+    "bright", "dark", "gleaming", "shadowy", "shimmering", "vivid",
+    "whisper", "roar", "echo", "murmur", "rustle", "thunder",
+    "silky", "rough", "smooth", "cold", "warm", "icy", "burning",
+    "sweet", "bitter", "fragrant", "pungent", "stale", "fresh",
+    "delicious", "sour", "crisp", "gentle", "fierce", "soft",
+}
+
+_FRIENDLY_CONTRACTIONS = set(CONTRACTIONS.keys())
+
+# ──────────────────────────────────────────────
+# Creative Style Transformation
+# ──────────────────────────────────────────────
+
+_VIVID_VERB_MAP = {
+    "said": ["whispered", "exclaimed", "murmured", "declared", "announced"],
+    "walked": ["strolled", "ambled", "sauntered", "trudged", "marched"],
+    "ran": ["sprinted", "dashed", "bolted", "raced", "charged"],
+    "looked": ["gazed", "peered", "glanced", "observed", "scrutinized"],
+    "went": ["ventured", "journeyed", "headed", "proceeded", "drifted"],
+    "got": ["obtained", "acquired", "seized", "gathered", "earned"],
+    "made": ["crafted", "forged", "fashioned", "sculpted", "created"],
+    "took": ["seized", "grasped", "claimed", "snatched", "captured"],
+    "came": ["arrived", "emerged", "appeared", "surfaced", "descended"],
+    "saw": ["glimpsed", "witnessed", "spotted", "beheld", "noticed"],
+    "put": ["placed", "deposited", "nestled", "positioned", "settled"],
+    "gave": ["offered", "bestowed", "presented", "granted", "delivered"],
+    "told": ["revealed", "confided", "informed", "shared", "disclosed"],
+    "asked": ["inquired", "wondered", "probed", "implored", "queried"],
+    "thought": ["pondered", "mused", "contemplated", "reflected", "imagined"],
+    "felt": ["sensed", "experienced", "perceived", "noticed", "recognized"],
+    "used": ["employed", "wielded", "harnessed", "utilized", "applied"],
+    "tried": ["attempted", "endeavored", "struggled", "strived", "ventured"],
+    "started": ["commenced", "launched", "embarked", "ignited", "initiated"],
+    "moved": ["glided", "shifted", "drifted", "swept", "flowed"],
+}
+
+_SENSORY_MARKERS = {
+    "the room": "the dimly lit room",
+    "the sky": "the vast, endless sky",
+    "the street": "the cobblestone street",
+    "the door": "the weathered door",
+    "the house": "the ivy-covered house",
+    "the wind": "the whispering wind",
+    "the rain": "the relentless rain",
+    "the sun": "the golden sun",
+    "the night": "the velvet night",
+    "the water": "the crystalline water",
+    "the garden": "the overgrown garden",
+    "the morning": "the dew-kissed morning",
+}
+
+
+def transform_to_creative(text: str) -> Dict[str, Any]:
+    """
+    Transform text to a creative writing style.
+
+    - Replace generic verbs with vivid alternatives
+    - Add sensory detail markers
+    - Convert flat descriptions to more evocative phrasing
+    """
+    changes: List[Dict[str, Any]] = []
+    transformed = text
+
+    # 1. Replace generic verbs with vivid verbs
+    import random
+    for generic, vivid_list in _VIVID_VERB_MAP.items():
+        pattern = re.compile(r'\b' + re.escape(generic) + r'\b', re.IGNORECASE)
+        for match in pattern.finditer(transformed):
+            replacement = random.choice(vivid_list)
+            if match.group()[0].isupper():
+                replacement = replacement.capitalize()
+            changes.append({
+                "type": "vivid_verb",
+                "original": match.group(),
+                "replacement": replacement,
+                "reason": "Replaced generic verb with vivid alternative"
+            })
+        if pattern.search(transformed):
+            transformed = pattern.sub(
+                lambda m: (random.choice(vivid_list).capitalize() if m.group()[0].isupper()
+                           else random.choice(vivid_list)),
+                transformed
+            )
+
+    # 2. Add sensory markers to plain noun phrases
+    for plain, sensory in _SENSORY_MARKERS.items():
+        pattern = re.compile(re.escape(plain), re.IGNORECASE)
+        if pattern.search(transformed):
+            changes.append({
+                "type": "sensory_detail",
+                "original": plain,
+                "replacement": sensory,
+                "reason": "Added sensory detail for richer imagery"
+            })
+            transformed = pattern.sub(sensory, transformed)
+
+    # 3. Convert "There was/were" to more vivid constructions
+    there_pattern = re.compile(r'\bThere (?:was|were) (a|an|the) (\w+)', re.IGNORECASE)
+    for m in there_pattern.finditer(transformed):
+        original_phrase = m.group()
+        article = m.group(1)
+        noun = m.group(2)
+        new_phrase = f"{article.capitalize()} {noun} stood"
+        changes.append({
+            "type": "vivid_construction",
+            "original": original_phrase,
+            "replacement": new_phrase,
+            "reason": "Converted 'there was/were' to active construction"
+        })
+    transformed = there_pattern.sub(lambda m: f"{m.group(1).capitalize()} {m.group(2)} stood", transformed)
+
+    return {
+        "original": text,
+        "transformed": transformed,
+        "changes": changes,
+        "change_count": len(changes),
+        "style": "creative"
+    }
+
+
+# ──────────────────────────────────────────────
+# Persuasive Style Transformation
+# ──────────────────────────────────────────────
+
+_POWER_WORDS = [
+    "proven", "guaranteed", "exclusive", "remarkable", "breakthrough",
+    "essential", "critical", "powerful", "transformative", "revolutionary",
+    "compelling", "undeniable", "extraordinary", "significant", "impactful",
+]
+
+_PERSUASIVE_REPLACEMENTS = {
+    "good": "exceptional",
+    "bad": "detrimental",
+    "important": "crucial",
+    "big": "substantial",
+    "small": "minimal",
+    "help": "empower",
+    "change": "transform",
+    "use": "leverage",
+    "need": "require",
+    "want": "deserve",
+    "think": "recognize",
+    "show": "demonstrate",
+    "try": "commit to",
+    "problem": "challenge",
+    "fix": "resolve",
+    "get": "achieve",
+    "make": "create",
+    "start": "launch",
+    "learn": "master",
+    "work": "perform",
+}
+
+
+def transform_to_persuasive(text: str) -> Dict[str, Any]:
+    """
+    Transform text to a persuasive style.
+
+    - Replace neutral words with power words
+    - Add 'you' language where appropriate
+    - Add rhetorical question patterns
+    - Incorporate call-to-action structures
+    """
+    changes: List[Dict[str, Any]] = []
+    transformed = text
+
+    # 1. Replace neutral words with persuasive equivalents
+    for neutral, powerful in _PERSUASIVE_REPLACEMENTS.items():
+        pattern = re.compile(r'\b' + re.escape(neutral) + r'\b', re.IGNORECASE)
+        matches = list(pattern.finditer(transformed))
+        if matches:
+            for match in matches:
+                replacement = powerful
+                if match.group()[0].isupper():
+                    replacement = powerful.capitalize()
+                changes.append({
+                    "type": "power_word",
+                    "original": match.group(),
+                    "replacement": replacement,
+                    "reason": "Replaced with more persuasive language"
+                })
+            transformed = pattern.sub(
+                lambda m: powerful.capitalize() if m.group()[0].isupper() else powerful,
+                transformed
+            )
+
+    # 2. Convert "I/We" statements to "You" language
+    you_replacements = {
+        r'\bWe offer\b': "You receive",
+        r'\bWe provide\b': "You gain access to",
+        r'\bWe believe\b': "You'll discover",
+        r'\bOur goal is\b': "Your benefit is",
+        r'\bWe have\b': "You have",
+        r'\bI think\b': "Consider this:",
+    }
+    for pattern_str, replacement in you_replacements.items():
+        pattern = re.compile(pattern_str, re.IGNORECASE)
+        if pattern.search(transformed):
+            changes.append({
+                "type": "you_language",
+                "original": pattern.search(transformed).group(),
+                "replacement": replacement,
+                "reason": "Shifted focus to the reader with 'you' language"
+            })
+            transformed = pattern.sub(replacement, transformed)
+
+    # 3. Add call-to-action hint to last sentence
+    sentences = transformed.rstrip().split('.')
+    sentences = [s for s in sentences if s.strip()]
+    if sentences and not any(w in sentences[-1].lower() for w in ["act", "start", "join", "discover", "try"]):
+        # Don't modify, just suggest
+        changes.append({
+            "type": "call_to_action_hint",
+            "original": "(end of text)",
+            "replacement": "Consider adding a call-to-action: 'Act now', 'Discover more', 'Start today'",
+            "reason": "Persuasive writing benefits from a clear call-to-action"
+        })
+
+    return {
+        "original": text,
+        "transformed": transformed,
+        "changes": changes,
+        "change_count": len(changes),
+        "style": "persuasive"
+    }
+
+
+# ──────────────────────────────────────────────
+# Journalistic Style Transformation
+# ──────────────────────────────────────────────
+
+_JOURNALISTIC_REPLACEMENTS = {
+    "said that": "said",
+    "due to the fact that": "because",
+    "in order to": "to",
+    "at this point in time": "now",
+    "in the event that": "if",
+    "a large number of": "many",
+    "the vast majority of": "most",
+    "is going to": "will",
+    "was able to": "could",
+    "in spite of the fact that": "although",
+    "for the purpose of": "to",
+    "with regard to": "about",
+    "on the other hand": "but",
+    "as a matter of fact": "in fact",
+    "it is important to note that": "",
+    "it should be noted that": "",
+    "basically": "",
+    "essentially": "",
+    "literally": "",
+}
+
+
+def transform_to_journalistic(text: str) -> Dict[str, Any]:
+    """
+    Transform text to a journalistic style.
+
+    - Trim wordiness (inverted pyramid brevity)
+    - Enforce active voice hints
+    - Short paragraph preference
+    - Attribution patterns
+    """
+    changes: List[Dict[str, Any]] = []
+    transformed = text
+
+    # 1. Cut wordy phrases
+    sorted_phrases = sorted(_JOURNALISTIC_REPLACEMENTS.items(), key=lambda x: len(x[0]), reverse=True)
+    for wordy, concise in sorted_phrases:
+        pattern = re.compile(re.escape(wordy), re.IGNORECASE)
+        if pattern.search(transformed):
+            changes.append({
+                "type": "conciseness",
+                "original": wordy,
+                "replacement": concise if concise else "(removed)",
+                "reason": "Journalistic writing favors brevity"
+            })
+            transformed = pattern.sub(concise, transformed)
+
+    # 2. Convert passive constructions: "was VBN by" → active hint
+    passive_pattern = re.compile(r'\b(\w+)\s+(?:was|were)\s+(\w+ed)\s+by\s+([\w\s]+?)([.,;!?])', re.IGNORECASE)
+    for m in passive_pattern.finditer(transformed):
+        subject = m.group(1)
+        verb = m.group(2)
+        agent = m.group(3).strip()
+        punct = m.group(4)
+        active_form = f"{agent} {verb} {subject}{punct}"
+        changes.append({
+            "type": "active_voice",
+            "original": m.group(),
+            "replacement": active_form,
+            "reason": "Converted passive to active voice for journalistic clarity"
+        })
+    transformed = passive_pattern.sub(
+        lambda m: f"{m.group(3).strip()} {m.group(2)} {m.group(1)}{m.group(4)}",
+        transformed
+    )
+
+    # 3. Break long paragraphs (hint only)
+    paragraphs = transformed.split('\n\n')
+    long_paras = [p for p in paragraphs if len(p.split()) > 60]
+    if long_paras:
+        changes.append({
+            "type": "paragraph_structure",
+            "original": f"({len(long_paras)} long paragraph(s))",
+            "replacement": "Consider breaking paragraphs longer than 3-4 sentences",
+            "reason": "Journalistic style prefers short, punchy paragraphs"
+        })
+
+    # 4. Ensure first sentence is strong and direct
+    first_sentence_match = re.match(r'^([^.!?]+[.!?])', transformed)
+    if first_sentence_match:
+        first = first_sentence_match.group(1)
+        weak_starts = ["there is", "there are", "there was", "there were", "it is", "it was"]
+        if any(first.lower().startswith(ws) for ws in weak_starts):
+            changes.append({
+                "type": "lead_strength",
+                "original": first[:50] + "...",
+                "replacement": "Rewrite the lead to start with the key subject/action",
+                "reason": "Journalistic leads should be direct and compelling"
+            })
+
+    return {
+        "original": text,
+        "transformed": transformed,
+        "changes": changes,
+        "change_count": len(changes),
+        "style": "journalistic"
+    }
+
+
+# ──────────────────────────────────────────────
+# Narrative Style Transformation
+# ──────────────────────────────────────────────
+
+_TELLING_TO_SHOWING = {
+    r'\bwas happy\b': "a smile spread across their face",
+    r'\bwas sad\b': "tears welled in their eyes",
+    r'\bwas angry\b': "their jaw clenched, fists tightening",
+    r'\bwas scared\b': "their heart hammered against their ribs",
+    r'\bwas tired\b': "their eyelids drooped, heavy as lead",
+    r'\bwas nervous\b': "their hands trembled slightly",
+    r'\bwas excited\b': "their eyes lit up with anticipation",
+    r'\bwas surprised\b': "their breath caught in their throat",
+    r'\bfelt happy\b': "warmth blossomed in their chest",
+    r'\bfelt sad\b': "a hollow ache settled in their stomach",
+    r'\bfelt angry\b': "heat crept up the back of their neck",
+    r'\bfelt scared\b': "ice slid down their spine",
+    r'\bfelt nervous\b': "butterflies churned in their stomach",
+    r'\bit was dark\b': "shadows swallowed the room",
+    r'\bit was cold\b': "the chill bit through their coat",
+    r'\bit was hot\b': "the air shimmered with heat",
+    r'\bit was quiet\b': "silence hung heavy in the air",
+    r'\bit was loud\b': "noise crashed in from every direction",
+}
+
+_SCENE_SETTING_PHRASES = {
+    r'^(\w)': None,  # placeholder — handled in code
+}
+
+_PAST_TENSE_FIXES = {
+    r'\b(he|she|it|they|we|I) (go)\b': r'\1 went',
+    r'\b(he|she|it|they|we|I) (see)\b': r'\1 saw',
+    r'\b(he|she|it|they|we|I) (run)\b': r'\1 ran',
+    r'\b(he|she|it|they|we|I) (come)\b': r'\1 came',
+    r'\b(he|she|it|they|we|I) (take)\b': r'\1 took',
+    r'\b(he|she|it|they|we|I) (give)\b': r'\1 gave',
+    r'\b(he|she|it|they|we|I) (know)\b': r'\1 knew',
+    r'\b(he|she|it|they|we|I) (think)\b': r'\1 thought',
+    r'\b(he|she|it|they|we|I) (begin)\b': r'\1 began',
+    r'\b(he|she|it|they|we|I) (speak)\b': r'\1 spoke',
+}
+
+
+def transform_to_narrative(text: str) -> Dict[str, Any]:
+    """
+    Transform text to a narrative/storytelling style.
+
+    - Normalize to past tense
+    - Convert telling to showing
+    - Add scene-setting language hints
+    """
+    changes: List[Dict[str, Any]] = []
+    transformed = text
+
+    # 1. "Show, don't tell" replacements
+    for pattern_str, showing in _TELLING_TO_SHOWING.items():
+        pattern = re.compile(pattern_str, re.IGNORECASE)
+        if pattern.search(transformed):
+            original = pattern.search(transformed).group()
+            changes.append({
+                "type": "show_dont_tell",
+                "original": original,
+                "replacement": showing,
+                "reason": "Converted 'telling' to 'showing' for more vivid narrative"
+            })
+            transformed = pattern.sub(showing, transformed)
+
+    # 2. Past tense normalization
+    for pattern_str, replacement in _PAST_TENSE_FIXES.items():
+        pattern = re.compile(pattern_str, re.IGNORECASE)
+        if pattern.search(transformed):
+            original = pattern.search(transformed).group()
+            new_text = pattern.sub(replacement, original)
+            changes.append({
+                "type": "tense_normalization",
+                "original": original,
+                "replacement": new_text,
+                "reason": "Normalized to past tense for consistent narrative voice"
+            })
+            transformed = pattern.sub(replacement, transformed)
+
+    # 3. Dialogue formatting hint
+    quote_count = transformed.count('"')
+    if quote_count == 0 and len(transformed.split()) > 30:
+        changes.append({
+            "type": "dialogue_hint",
+            "original": "(no dialogue detected)",
+            "replacement": "Consider adding dialogue to bring characters to life",
+            "reason": "Narrative writing benefits from character dialogue"
+        })
+
+    # 4. Scene setting check
+    first_sentence = re.match(r'^([^.!?]+[.!?])', transformed)
+    if first_sentence:
+        first = first_sentence.group(1).lower()
+        scene_words = {"when", "as", "the morning", "the night", "outside", "inside", "above", "below", "around"}
+        if not any(w in first for w in scene_words):
+            changes.append({
+                "type": "scene_setting_hint",
+                "original": first_sentence.group(1)[:50] + "...",
+                "replacement": "Consider opening with scene-setting details (time, place, atmosphere)",
+                "reason": "Strong narratives ground the reader in the scene from the start"
+            })
+
+    return {
+        "original": text,
+        "transformed": transformed,
+        "changes": changes,
+        "change_count": len(changes),
+        "style": "narrative"
+    }
+
+
+# ──────────────────────────────────────────────
+# Style Scoring Per Paragraph
+# ──────────────────────────────────────────────
+
+
+def score_style_per_paragraph(text: str, doc) -> List[Dict[str, Any]]:
+    """
+    Score each paragraph on multiple style dimensions for a visual heatmap.
+
+    Returns a list of dicts, one per paragraph, with scores 0-100 for:
+    - formality, casualness, creativity, persuasiveness, journalistic, narrative
+    """
+    paragraphs = [p.strip() for p in text.split('\n') if p.strip()]
+    if not paragraphs:
+        paragraphs = [text.strip()]
+
+    results: List[Dict[str, Any]] = []
+
+    for idx, para in enumerate(paragraphs):
+        words = para.lower().split()
+        word_count = len(words)
+        if word_count == 0:
+            continue
+
+        sentences = re.split(r'[.!?]+', para)
+        sentences = [s.strip() for s in sentences if s.strip()]
+        sent_count = max(len(sentences), 1)
+        avg_sent_len = word_count / sent_count
+
+        # --- Formality score ---
+        formal_count = sum(1 for w in words if w in set(INFORMAL_TO_FORMAL.values()))
+        contraction_count = sum(1 for w in words if w in CONTRACTIONS)
+        formality = min(100, max(0, 50 + formal_count * 8 - contraction_count * 12))
+
+        # --- Casualness score ---
+        casual_markers = sum(1 for w in words if w in CONTRACTIONS or w in {"like", "kinda", "sorta", "yeah", "nah", "cool", "awesome", "ok"})
+        exclamation_count = para.count('!')
+        casualness = min(100, casual_markers * 10 + exclamation_count * 8)
+
+        # --- Creativity score ---
+        sensory_words = _SENSORY_WORDS
+        sensory_count = sum(1 for w in words if w in sensory_words)
+        vivid_verbs = set()
+        for v_list in _VIVID_VERB_MAP.values():
+            vivid_verbs.update(v_list)
+        vivid_count = sum(1 for w in words if w in vivid_verbs)
+        simile_count = len(re.findall(r'\blike a\b|\bas if\b|\bas though\b', para, re.IGNORECASE))
+        creativity = min(100, sensory_count * 8 + vivid_count * 10 + simile_count * 15)
+
+        # --- Persuasiveness score ---
+        power_count = sum(1 for w in words if w in set(_POWER_WORDS) or w in set(_PERSUASIVE_REPLACEMENTS.values()))
+        you_count = sum(1 for w in words if w in {"you", "your", "you'll", "you're"})
+        question_count = para.count('?')
+        persuasiveness = min(100, power_count * 10 + you_count * 6 + question_count * 12)
+
+        # --- Journalistic score ---
+        short_sent = sum(1 for s in sentences if len(s.split()) <= 20)
+        quote_present = 1 if '"' in para else 0
+        attribution = len(re.findall(r'\b(?:said|according to|reported|stated)\b', para, re.IGNORECASE))
+        journalistic = min(100, (short_sent / sent_count * 40) + quote_present * 20 + attribution * 15 + (5 if avg_sent_len < 18 else 0))
+
+        # --- Narrative score ---
+        past_tense_count = len(re.findall(r'\b\w+ed\b', para))
+        dialogue = 1 if '"' in para else 0
+        sensory_narrative = sum(1 for w in words if w in sensory_words)
+        narrative = min(100, past_tense_count * 4 + dialogue * 20 + sensory_narrative * 8)
+
+        results.append({
+            "paragraph_index": idx,
+            "text_preview": para[:80] + ("..." if len(para) > 80 else ""),
+            "word_count": word_count,
+            "scores": {
+                "formality": round(formality),
+                "casualness": round(casualness),
+                "creativity": round(creativity),
+                "persuasiveness": round(persuasiveness),
+                "journalistic": round(journalistic),
+                "narrative": round(narrative),
+            }
+        })
+
+    return results
+
+_ACTION_VERBS_ASSERTIVE = {
+    "must", "will", "shall", "demand", "require", "insist",
+    "command", "decide", "achieve", "conquer", "lead", "commit",
+    "guarantee", "ensure", "deliver", "execute", "own", "drive",
+}
+
+
+def analyze_tone(doc, text: str) -> Dict[str, Any]:
+    """
+    Detect the tone of the text across 7 dimensions, returning per-sentence
+    tone scores and an overall tone profile.
+
+    Dimensions: assertive, empathetic, persuasive, professional, friendly,
+                urgent, narrative.
+
+    Args:
+        doc:  spaCy Doc object
+        text: raw input text
+
+    Returns:
+        Dict with overall_tone, tone_scores, per_sentence, dominant_tone,
+        tone_description, and tone_definitions metadata.
+    """
+    sentences = list(doc.sents)
+    if not sentences:
+        return _empty_tone_result()
+
+    per_sentence: List[Dict[str, Any]] = []
+    accumulated = {t: 0.0 for t in TONE_DEFINITIONS}
+
+    for sent in sentences:
+        scores = _score_sentence_tone(sent, text)
+        per_sentence.append({
+            "text": sent.text.strip(),
+            "start": sent.start_char,
+            "end": sent.end_char,
+            "scores": scores,
+            "dominant": max(scores, key=scores.get),
+        })
+        for t, v in scores.items():
+            accumulated[t] += v
+
+    n = len(sentences)
+    overall = {t: round(v / n, 3) for t, v in accumulated.items()}
+    dominant = max(overall, key=overall.get)
+
+    return {
+        "tone_scores": overall,
+        "dominant_tone": dominant,
+        "tone_label": TONE_DEFINITIONS[dominant]["label"],
+        "tone_description": TONE_DEFINITIONS[dominant]["description"],
+        "tone_color": TONE_DEFINITIONS[dominant]["color"],
+        "per_sentence": per_sentence,
+        "sentence_count": n,
+        "tone_definitions": {
+            k: {"label": v["label"], "description": v["description"], "color": v["color"]}
+            for k, v in TONE_DEFINITIONS.items()
+        },
+    }
+
+
+def _empty_tone_result() -> Dict[str, Any]:
+    """Return a zeroed-out tone result for empty input."""
+    zero = {t: 0.0 for t in TONE_DEFINITIONS}
+    return {
+        "tone_scores": zero,
+        "dominant_tone": "professional",
+        "tone_label": "Professional",
+        "tone_description": TONE_DEFINITIONS["professional"]["description"],
+        "tone_color": TONE_DEFINITIONS["professional"]["color"],
+        "per_sentence": [],
+        "sentence_count": 0,
+        "tone_definitions": {
+            k: {"label": v["label"], "description": v["description"], "color": v["color"]}
+            for k, v in TONE_DEFINITIONS.items()
+        },
+    }
+
+
+def _score_sentence_tone(sent, full_text: str) -> Dict[str, float]:
+    """Score a single sentence across all 7 tone dimensions (0-1 each)."""
+    tokens = list(sent)
+    words = [t for t in tokens if t.is_alpha]
+    word_count = len(words) or 1
+    lower_words = {t.lower_ for t in words}
+    lemmas = {t.lemma_.lower() for t in words}
+    text = sent.text.strip()
+
+    scores: Dict[str, float] = {}
+
+    # ── Assertive ──
+    imperative = 1.0 if (tokens and tokens[0].pos_ == "VERB" and tokens[0].tag_ == "VB") else 0.0
+    assertive_hits = len(lemmas & _ACTION_VERBS_ASSERTIVE) / word_count
+    exclamation = 0.3 if text.endswith("!") else 0.0
+    scores["assertive"] = min(1.0, imperative * 0.5 + assertive_hits * 3.0 + exclamation)
+
+    # ── Empathetic ──
+    emp_hits = len(lower_words & _EMPATHETIC_WORDS) / word_count
+    scores["empathetic"] = min(1.0, emp_hits * 4.0)
+
+    # ── Persuasive ──
+    rhetorical = 0.4 if text.endswith("?") else 0.0
+    power_hits = len(lemmas & _POWER_WORDS) / word_count
+    scores["persuasive"] = min(1.0, rhetorical + power_hits * 4.0)
+
+    # ── Professional ──
+    formal_vocab = len(lemmas & _HEDGE_WORDS) / word_count
+    no_contractions = 0.2 if not any(t.lower_ in _FRIENDLY_CONTRACTIONS for t in tokens) else 0.0
+    long_words = sum(1 for t in words if len(t.text) > 8) / word_count
+    scores["professional"] = min(1.0, formal_vocab * 4.0 + no_contractions + long_words * 1.5)
+
+    # ── Friendly ──
+    has_contraction = 0.3 if any(t.lower_ in _FRIENDLY_CONTRACTIONS for t in tokens) else 0.0
+    excl_friendly = 0.25 if text.endswith("!") else 0.0
+    short_sent = 0.2 if word_count <= 10 else 0.0
+    scores["friendly"] = min(1.0, has_contraction + excl_friendly + short_sent)
+
+    # ── Urgent ──
+    urgent_hits = len(lemmas & _URGENT_WORDS) / word_count
+    short_urgent = 0.2 if word_count <= 8 else 0.0
+    scores["urgent"] = min(1.0, urgent_hits * 5.0 + short_urgent + exclamation)
+
+    # ── Narrative ──
+    sensory_hits = len(lemmas & _SENSORY_WORDS) / word_count
+    past_tense = sum(1 for t in words if t.tag_ in ("VBD", "VBN")) / word_count
+    adj_count = sum(1 for t in words if t.pos_ == "ADJ") / word_count
+    scores["narrative"] = min(1.0, sensory_hits * 4.0 + past_tense * 1.5 + adj_count * 1.0)
+
+    # Round
+    return {k: round(v, 3) for k, v in scores.items()}
+
+
+# ── Tone Transformation ──
+
+_TONE_TRANSFORMS: Dict[str, Dict[str, Any]] = {
+    "assertive": {
+        "replacements": {
+            "maybe": "certainly",
+            "perhaps": "clearly",
+            "might": "will",
+            "could": "must",
+            "i think": "I am certain",
+            "it seems": "it is clear",
+            "possibly": "undoubtedly",
+            "i believe": "I assert",
+            "in my opinion": "the fact is",
+            "it appears": "it is evident",
+        },
+        "sentence_suffix": "",
+    },
+    "empathetic": {
+        "replacements": {
+            "you must": "we can together",
+            "you should": "perhaps we could",
+            "you need to": "it might help to",
+            "do this": "we could try this",
+            "i want": "I understand and I hope",
+            "immediately": "when you feel ready",
+            "required": "appreciated",
+        },
+        "sentence_suffix": "",
+    },
+    "persuasive": {
+        "replacements": {
+            "good": "exceptional",
+            "nice": "remarkable",
+            "change": "transform",
+            "help": "empower",
+            "use": "leverage",
+            "important": "critical",
+            "big": "monumental",
+            "try": "seize the opportunity to",
+            "think about": "imagine",
+            "consider": "envision",
+        },
+        "sentence_suffix": "",
+    },
+    "professional": {
+        "replacements": {
+            "gonna": "going to",
+            "wanna": "wish to",
+            "gotta": "need to",
+            "stuff": "materials",
+            "things": "matters",
+            "ok": "acceptable",
+            "cool": "satisfactory",
+            "awesome": "commendable",
+            "great": "excellent",
+            "kind of": "somewhat",
+        },
+        "sentence_suffix": "",
+    },
+    "friendly": {
+        "replacements": {
+            "therefore": "so",
+            "however": "but",
+            "furthermore": "also",
+            "consequently": "so basically",
+            "regarding": "about",
+            "utilize": "use",
+            "demonstrate": "show",
+            "sufficient": "enough",
+            "commence": "start",
+            "terminate": "end",
+        },
+        "sentence_suffix": "",
+    },
+    "urgent": {
+        "replacements": {
+            "consider": "act on",
+            "eventually": "now",
+            "later": "immediately",
+            "soon": "right now",
+            "when possible": "immediately",
+            "at some point": "today",
+            "should": "must",
+            "might want to": "need to",
+            "could": "must",
+            "please": "you need to",
+        },
+        "sentence_suffix": "",
+    },
+    "narrative": {
+        "replacements": {
+            "walked": "strode",
+            "said": "whispered",
+            "looked": "gazed",
+            "went": "ventured",
+            "was": "appeared",
+            "big": "towering",
+            "small": "diminutive",
+            "happy": "radiant",
+            "sad": "melancholic",
+            "old": "weathered",
+        },
+        "sentence_suffix": "",
+    },
+}
+
+
+def transform_tone(text: str, doc, target_tone: str) -> Dict[str, Any]:
+    """
+    Transform the text towards a target tone using word substitution rules.
+
+    Args:
+        text:        raw input text
+        doc:         spaCy Doc
+        target_tone: one of the 7 tone keys
+
+    Returns:
+        Dict with original, transformed, changes list, target_tone, before/after scores.
+    """
+    target_tone = target_tone.lower()
+    if target_tone not in _TONE_TRANSFORMS:
+        return {
+            "original": text,
+            "transformed": text,
+            "changes": [],
+            "change_count": 0,
+            "target_tone": target_tone,
+            "error": f"Unknown tone: {target_tone}. Choose from: {', '.join(_TONE_TRANSFORMS.keys())}",
+        }
+
+    rules = _TONE_TRANSFORMS[target_tone]
+    transformed = text
+    changes: List[Dict[str, str]] = []
+
+    for old, new in sorted(rules["replacements"].items(), key=lambda x: len(x[0]), reverse=True):
+        pattern = re.compile(re.escape(old), re.IGNORECASE)
+        matches = pattern.findall(transformed)
+        for match in matches:
+            replacement = new if match[0].islower() else new.capitalize()
+            changes.append({
+                "type": "tone_adjustment",
+                "original": match,
+                "replacement": replacement,
+                "target_tone": target_tone,
+                "reason": f"Adjusted for {TONE_DEFINITIONS[target_tone]['label']} tone",
+            })
+        if matches:
+            transformed = pattern.sub(
+                lambda m: new.capitalize() if m.group()[0].isupper() else new,
+                transformed,
+            )
+
+    # Compute before/after tone scores
+    from .text_analyzer import get_nlp
+    new_doc = get_nlp()(transformed)
+    before_scores = analyze_tone(doc, text).get("tone_scores", {})
+    after_scores = analyze_tone(new_doc, transformed).get("tone_scores", {})
+
+    return {
+        "original": text,
+        "transformed": transformed,
+        "changes": changes,
+        "change_count": len(changes),
+        "target_tone": target_tone,
+        "tone_label": TONE_DEFINITIONS[target_tone]["label"],
+        "before_scores": before_scores,
+        "after_scores": after_scores,
     }

@@ -12,6 +12,22 @@ class TargetStyle(str, Enum):
     FORMAL = "formal"
     CASUAL = "casual"
     ACADEMIC = "academic"
+    CREATIVE = "creative"
+    PERSUASIVE = "persuasive"
+    JOURNALISTIC = "journalistic"
+    NARRATIVE = "narrative"
+
+
+class ToneType(str, Enum):
+    """Available tone types for analysis and transformation"""
+    AUTO = "auto"
+    ASSERTIVE = "assertive"
+    EMPATHETIC = "empathetic"
+    PERSUASIVE = "persuasive"
+    PROFESSIONAL = "professional"
+    FRIENDLY = "friendly"
+    URGENT = "urgent"
+    NARRATIVE = "narrative"
 
 
 class FeatureToggles(BaseModel):
@@ -21,8 +37,11 @@ class FeatureToggles(BaseModel):
     flow: bool = Field(default=True, description="Enable flow analysis")
     style: bool = Field(default=True, description="Enable style analysis")
     consistency: bool = Field(default=True, description="Enable consistency checking")
+    grammar: bool = Field(default=True, description="Enable grammar checking")
     transform: bool = Field(default=False, description="Enable style transformation")
     explanations: bool = Field(default=True, description="Generate explanations")
+    mind_map: bool = Field(default=True, description="Generate concept mind map")
+    antipatterns: bool = Field(default=True, description="Detect writing anti-patterns")
 
 
 class AnalysisRequest(BaseModel):
@@ -30,7 +49,8 @@ class AnalysisRequest(BaseModel):
     text: str = Field(..., min_length=1, max_length=50000, description="Text to analyze")
     features: Optional[FeatureToggles] = Field(default=None, description="Feature toggles")
     target_style: Optional[TargetStyle] = Field(default=TargetStyle.FORMAL, description="Target style for transformation")
-    long_sentence_threshold: Optional[int] = Field(default=100, ge=20, le=200, description="Word count threshold for long sentences")
+    target_tone: Optional[ToneType] = Field(default=ToneType.AUTO, description="Target tone for tone transformation")
+    long_sentence_threshold: Optional[int] = Field(default=25, ge=10, le=200, description="Word count threshold for long sentences")
     repeated_word_min_count: Optional[int] = Field(default=3, ge=2, le=10, description="Minimum count for repeated word detection")
     
     class Config:
@@ -47,7 +67,7 @@ class AnalysisRequest(BaseModel):
                     "explanations": True
                 },
                 "target_style": "formal",
-                "long_sentence_threshold": 100,
+                "long_sentence_threshold": 25,
                 "repeated_word_min_count": 3
             }
         }
@@ -114,6 +134,12 @@ class AnalysisResponse(BaseModel):
     suggestions: Optional[List[Dict[str, Any]]] = None
     explanations: Optional[Dict[str, Any]] = None
     scores: Optional[AnalysisScores] = None
+    # Grammar analysis
+    grammar_analysis: Optional[Dict[str, Any]] = None
+    # Tone analysis
+    tone_analysis: Optional[Dict[str, Any]] = None
+    # Style scores per paragraph
+    style_scores: Optional[List[Dict[str, Any]]] = None
     # New enhanced features
     passive_voice: Optional[Dict[str, Any]] = None
     sentiment: Optional[Dict[str, Any]] = None
@@ -123,6 +149,14 @@ class AnalysisResponse(BaseModel):
     paragraph_structure: Optional[Dict[str, Any]] = None
     lexical_density: Optional[Dict[str, Any]] = None
     sentence_rhythm: Optional[Dict[str, Any]] = None
+    # Narrative tracker (Phase 5)
+    narrative_tracker: Optional[Dict[str, Any]] = None
+    # Inline annotations (Phase 6)
+    annotations: Optional[List[Dict[str, Any]]] = None
+    # Mind map (Phase 7)
+    mind_map: Optional[Dict[str, Any]] = None
+    # Anti-patterns (Phase 8)
+    antipatterns: Optional[Dict[str, Any]] = None
     
     class Config:
         json_schema_extra = {

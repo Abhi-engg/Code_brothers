@@ -12,7 +12,7 @@ const CONFIG = {
 
 // State
 let analysisResults = null;
-let currentTab = 'overview';
+let currentTab = 'write';
 
 // DOM Elements
 const elements = {
@@ -28,6 +28,7 @@ const elements = {
     toastContainer: document.getElementById('toast-container'),
     apiStatus: document.getElementById('api-status'),
     targetStyle: document.getElementById('target-style'),
+    targetTone: document.getElementById('target-tone'),
     thresholdSentence: document.getElementById('threshold-sentence'),
     thresholdRepeated: document.getElementById('threshold-repeated')
 };
@@ -38,7 +39,9 @@ const featureToggles = {
     flow: document.getElementById('feat-flow'),
     style: document.getElementById('feat-style'),
     consistency: document.getElementById('feat-consistency'),
-    transform: document.getElementById('feat-transform')
+    transform: document.getElementById('feat-transform'),
+    mindmap: document.getElementById('feat-mindmap'),
+    antipatterns: document.getElementById('feat-antipatterns')
 };
 
 // Initialize
@@ -143,13 +146,16 @@ async function analyzeText() {
         style: featureToggles.style.checked,
         consistency: featureToggles.consistency.checked,
         transform: featureToggles.transform.checked,
-        explanations: true
+        explanations: true,
+        mind_map: featureToggles.mindmap ? featureToggles.mindmap.checked : true,
+        antipatterns: featureToggles.antipatterns ? featureToggles.antipatterns.checked : true
     };
     
     const requestBody = {
         text: text,
         features: features,
         target_style: elements.targetStyle.value,
+        target_tone: elements.targetTone ? elements.targetTone.value : 'auto',
         long_sentence_threshold: parseInt(elements.thresholdSentence.value) || 25,
         repeated_word_min_count: parseInt(elements.thresholdRepeated.value) || 3
     };
@@ -297,6 +303,9 @@ function renderTab(tabName) {
     let content = '';
     
     switch (tabName) {
+        case 'write':
+            content = renderWrite();
+            break;
         case 'overview':
             content = renderOverview();
             break;
@@ -306,11 +315,23 @@ function renderTab(tabName) {
         case 'enhancements':
             content = renderEnhancements();
             break;
+        case 'tone':
+            content = renderTone();
+            break;
         case 'suggestions':
             content = renderSuggestions();
             break;
         case 'transform':
             content = renderTransform();
+            break;
+        case 'narrative':
+            content = renderNarrative();
+            break;
+        case 'mindmap':
+            content = renderMindMap();
+            break;
+        case 'antipatterns':
+            content = renderAntiPatterns();
             break;
         case 'details':
             content = renderDetails();
@@ -324,6 +345,684 @@ function renderTab(tabName) {
     requestAnimationFrame(() => {
         elements.tabContent.style.transition = 'opacity 0.3s ease';
         elements.tabContent.style.opacity = '1';
+    });
+    
+    // Post-render binding for Write tab
+    if (tabName === 'write') {
+        bindWriteTabEvents();
+    }
+    // Post-render: initialize vis.js mind map
+    if (tabName === 'mindmap') {
+        setTimeout(() => initMindMapNetwork(), 50);
+    }
+    // Post-render: bind anti-pattern expand/collapse
+    if (tabName === 'antipatterns') {
+        setTimeout(() => bindAntiPatternEvents(), 50);
+    }
+}
+
+// ════════════════════════════════════════════════════
+// Render Write Tab — Inline Annotated Text (Phase 6)
+// ════════════════════════════════════════════════════
+
+// Category metadata for display
+const ANN_CATEGORIES = {
+    grammar:     { label: 'Grammar',     icon: '🔤', color: '#EF4444' },
+    passive:     { label: 'Passive',     icon: '🔀', color: '#F97316' },
+    filler:      { label: 'Filler',      icon: '🗑️', color: '#EAB308' },
+    cliche:      { label: 'Cliché',      icon: '🔁', color: '#A855F7' },
+    style:       { label: 'Style',       icon: '📏', color: '#3B82F6' },
+    tense:       { label: 'Tense',       icon: '⏱️', color: '#14B8A6' },
+    perspective: { label: 'Perspective', icon: '👁️', color: '#EC4899' },
+    repetition:  { label: 'Repetition',  icon: '🔂', color: '#6B7280' },
+};
+
+// Track which categories are visible
+let annVisibleCategories = new Set(Object.keys(ANN_CATEGORIES));
+
+function renderWrite() {
+    const annotations = analysisResults.annotations || [];
+    const text = analysisResults.input?.text || '';
+
+    // Count per category
+    const counts = {};
+    for (const a of annotations) {
+        counts[a.category] = (counts[a.category] || 0) + 1;
+    }
+    const totalCount = annotations.length;
+
+    // Build filter bar
+    let filterBar = '<div class="ann-filter-bar">';
+    for (const [cat, meta] of Object.entries(ANN_CATEGORIES)) {
+        const c = counts[cat] || 0;
+        if (c === 0) continue;
+        const isActive = annVisibleCategories.has(cat);
+        filterBar += `
+            <button class="ann-filter-btn ann-filter-${cat} ${isActive ? 'active' : 'inactive'}"
+                    data-cat="${cat}" title="Toggle ${meta.label}">
+                <span>${meta.icon} ${meta.label}</span>
+                <span class="ann-count">${c}</span>
+            </button>`;
+    }
+    filterBar += '</div>';
+
+    // Summary line
+    const summaryLine = `
+        <div class="ann-summary">
+            <strong>${totalCount}</strong> annotation${totalCount !== 1 ? 's' : ''} found
+            &nbsp;·&nbsp; Hover highlighted text for details
+        </div>`;
+
+    // Build annotated text HTML
+    const annotatedHTML = buildAnnotatedHTML(text, annotations);
+
+    return `
+        <div class="space-y-4 animate-fade-in">
+            <div class="flex items-center justify-between mb-2">
+                <h3 class="font-semibold text-gray-900 text-lg flex items-center">
+                    <span class="text-2xl mr-2">✍️</span> Annotated Manuscript
+                </h3>
+                <span class="text-xs text-gray-400">${text.length} chars</span>
+            </div>
+            ${summaryLine}
+            ${filterBar}
+            <div class="annotated-text" id="annotated-text-area">
+                ${annotatedHTML}
+            </div>
+        </div>`;
+}
+
+/**
+ * Build HTML string with annotation spans inserted at the correct positions.
+ * Handles overlapping annotations by flattening them — if two annotations
+ * overlap the same character range, both CSS classes are applied.
+ */
+function buildAnnotatedHTML(text, annotations) {
+    if (!annotations || annotations.length === 0) return _esc(text);
+
+    // Filter to only visible categories
+    const visible = annotations.filter(a => annVisibleCategories.has(a.category));
+
+    // Create sorted, non-overlapping segments with annotation data.
+    // Each char position maps to a set of annotations covering it.
+    // For performance, we use an event-based sweep approach.
+    const events = []; // {pos, type: 'open'|'close', ann}
+
+    for (let i = 0; i < visible.length; i++) {
+        const a = visible[i];
+        if (a.start == null || a.end == null || a.start >= a.end) continue;
+        const start = Math.max(0, Math.min(a.start, text.length));
+        const end = Math.max(0, Math.min(a.end, text.length));
+        events.push({ pos: start, type: 'open', ann: a, idx: i });
+        events.push({ pos: end, type: 'close', ann: a, idx: i });
+    }
+
+    // Sort events: by position, then closes before opens at same pos
+    events.sort((a, b) => a.pos - b.pos || (a.type === 'close' ? -1 : 1));
+
+    let html = '';
+    let cursor = 0;
+    const activeSet = new Map(); // idx → ann
+
+    for (const ev of events) {
+        // Emit text from cursor to this event position
+        if (ev.pos > cursor) {
+            if (activeSet.size > 0) {
+                html += wrapAnnotatedSegment(text.slice(cursor, ev.pos), activeSet);
+            } else {
+                html += _esc(text.slice(cursor, ev.pos));
+            }
+            cursor = ev.pos;
+        }
+
+        if (ev.type === 'open') {
+            // Close current span if any, re-open with new set
+            activeSet.set(ev.idx, ev.ann);
+        } else {
+            activeSet.delete(ev.idx);
+        }
+    }
+
+    // Remaining text after last event
+    if (cursor < text.length) {
+        html += _esc(text.slice(cursor));
+    }
+
+    return html;
+}
+
+/**
+ * Wrap a text segment with annotation span(s).
+ * If multiple annotations overlap, we pick the highest-severity one for
+ * the primary style but show all in the tooltip.
+ */
+function wrapAnnotatedSegment(segment, activeMap) {
+    const anns = Array.from(activeMap.values());
+    // Pick primary annotation (highest severity wins)
+    const sevOrder = { error: 0, high: 1, warning: 2, medium: 3, info: 4, low: 5 };
+    anns.sort((a, b) => (sevOrder[a.severity] ?? 9) - (sevOrder[b.severity] ?? 9));
+    const primary = anns[0];
+
+    const classes = ['ann', `ann-${primary.category}`];
+
+    // Build tooltip content (all overlapping annotations)
+    let tooltipInner = '';
+    for (const a of anns) {
+        const cat = ANN_CATEGORIES[a.category] || { label: a.category, icon: '📌' };
+        tooltipInner += `
+            <div style="margin-bottom:6px">
+                <span class="ann-tooltip-cat ann-tooltip-cat-${a.category}">${cat.icon} ${cat.label}</span>
+                <span class="severity-badge severity-${a.severity}">${a.severity}</span>
+                <div class="ann-tooltip-msg">${_esc(a.message)}</div>
+                ${a.suggestion ? `<div class="ann-tooltip-suggestion">💡 ${_esc(a.suggestion)}</div>` : ''}
+            </div>`;
+    }
+
+    // Action buttons (only if primary has a suggestion)
+    let actions = '';
+    if (primary.suggestion) {
+        actions = `
+            <div class="ann-tooltip-actions">
+                <button class="ann-btn-dismiss" data-action="dismiss" data-ann-start="${primary.start}" data-ann-end="${primary.end}">Dismiss</button>
+            </div>`;
+    }
+
+    return `<span class="${classes.join(' ')}">${_esc(segment)}<span class="ann-tooltip">${tooltipInner}${actions}</span></span>`;
+}
+
+/**
+ * Bind click events for filter buttons and dismiss/accept actions
+ * after the Write tab DOM is rendered.
+ */
+function bindWriteTabEvents() {
+    // Filter buttons
+    document.querySelectorAll('.ann-filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const cat = btn.dataset.cat;
+            if (annVisibleCategories.has(cat)) {
+                annVisibleCategories.delete(cat);
+            } else {
+                annVisibleCategories.add(cat);
+            }
+            // Re-render only the annotated area + filters
+            const writeHTML = renderWrite();
+            elements.tabContent.innerHTML = writeHTML;
+            bindWriteTabEvents();
+        });
+    });
+
+    // Dismiss buttons inside tooltips
+    document.querySelectorAll('.ann-btn-dismiss').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const start = parseInt(btn.dataset.annStart);
+            const end = parseInt(btn.dataset.annEnd);
+            // Remove matching annotation from results
+            if (analysisResults.annotations) {
+                analysisResults.annotations = analysisResults.annotations.filter(
+                    a => !(a.start === start && a.end === end)
+                );
+            }
+            // Re-render
+            const writeHTML = renderWrite();
+            elements.tabContent.innerHTML = writeHTML;
+            bindWriteTabEvents();
+        });
+    });
+}
+
+// ════════════════════════════════════════════════════
+// Render Anti-Patterns Tab — "What NOT to Do" (Phase 8)
+// ════════════════════════════════════════════════════
+
+const AP_CATEGORY_META = {
+    adverb_overuse:      { label: 'Adverb Overuse',      icon: '📝', color: '#F59E0B' },
+    show_dont_tell:      { label: 'Show Don\'t Tell',     icon: '🎭', color: '#EC4899' },
+    nominalizations:     { label: 'Nominalizations',      icon: '📦', color: '#8B5CF6' },
+    hedge_words:         { label: 'Hedge Words',          icon: '🌫️', color: '#6366F1' },
+    redundant_modifiers: { label: 'Redundant Modifiers',  icon: '♻️',  color: '#EF4444' },
+    weak_openings:       { label: 'Weak Openings',        icon: '🚪', color: '#F97316' },
+    filter_words:        { label: 'Filter Words',         icon: '🔍', color: '#14B8A6' },
+    info_dumps:          { label: 'Info Dumps',            icon: '📚', color: '#64748B' },
+};
+
+const _SEV_COLORS = {
+    critical: { bg: '#FEE2E2', border: '#EF4444', text: '#991B1B', badge: '#EF4444' },
+    moderate: { bg: '#FEF3C7', border: '#F59E0B', text: '#92400E', badge: '#F59E0B' },
+    minor:    { bg: '#F0FDF4', border: '#22C55E', text: '#166534', badge: '#22C55E' },
+};
+
+function renderAntiPatterns() {
+    const ap = analysisResults.antipatterns;
+
+    if (!ap || ap.error || !ap.categories) {
+        return `
+            <div class="text-center py-12 text-gray-400 animate-fade-in">
+                <div class="text-5xl mb-4">🚫</div>
+                <p class="text-lg font-medium mb-2">No Anti-Pattern Data</p>
+                <p class="text-sm">Submit text to detect writing anti-patterns.</p>
+                ${ap?.error ? `<p class="text-xs text-red-400 mt-4">Error: ${_esc(ap.error)}</p>` : ''}
+            </div>`;
+    }
+
+    const { categories, summary } = ap;
+
+    // Summary bar
+    const summaryHtml = `
+        <div class="ap-summary-bar">
+            <span class="ap-summary-label">Anti-Patterns Found:</span>
+            ${summary.critical > 0 ? `<span class="ap-sev-chip ap-sev-critical">${summary.critical} critical</span>` : ''}
+            ${summary.moderate > 0 ? `<span class="ap-sev-chip ap-sev-moderate">${summary.moderate} moderate</span>` : ''}
+            ${summary.minor > 0 ? `<span class="ap-sev-chip ap-sev-minor">${summary.minor} minor</span>` : ''}
+            ${summary.total === 0 ? '<span class="text-green-600 font-semibold">✅ No anti-patterns detected!</span>' : ''}
+            <span class="ap-summary-total">${summary.total} total</span>
+        </div>`;
+
+    // Category cards
+    let cardsHtml = '';
+    for (const [catKey, catData] of Object.entries(categories)) {
+        const meta = AP_CATEGORY_META[catKey] || { label: catKey, icon: '📌', color: '#94A3B8' };
+        const count = catData.count || 0;
+        const expanded = count > 0;
+
+        // Instance list
+        let instancesHtml = '';
+        if (count > 0) {
+            instancesHtml = '<div class="ap-instances">';
+            for (const inst of catData.instances) {
+                const sev = _SEV_COLORS[inst.severity] || _SEV_COLORS.minor;
+                instancesHtml += `
+                    <div class="ap-instance" style="border-left-color:${sev.badge}">
+                        <div class="ap-inst-header">
+                            <span class="ap-sev-dot" style="background:${sev.badge}"></span>
+                            <span class="ap-inst-text">${_esc(inst.text)}</span>
+                            <span class="ap-inst-sev" style="color:${sev.badge}">${inst.severity}</span>
+                        </div>
+                        <p class="ap-inst-location">${_esc(inst.location)}</p>
+                        <p class="ap-inst-suggestion">💡 ${_esc(inst.suggestion)}</p>
+                        ${inst.before_after_example ? `
+                            <div class="ap-before-after">
+                                <div class="ap-ba-bad">
+                                    <span class="ap-ba-label">✗ Before</span>
+                                    <span class="ap-ba-text">${_esc(inst.before_after_example.before)}</span>
+                                </div>
+                                <span class="ap-ba-arrow">→</span>
+                                <div class="ap-ba-good">
+                                    <span class="ap-ba-label">✓ After</span>
+                                    <span class="ap-ba-text">${_esc(inst.before_after_example.after)}</span>
+                                </div>
+                            </div>` : ''}
+                    </div>`;
+            }
+            instancesHtml += '</div>';
+        }
+
+        cardsHtml += `
+            <div class="ap-card ${count === 0 ? 'ap-card-clean' : ''}">
+                <div class="ap-card-header" data-ap-toggle="${catKey}">
+                    <div class="ap-card-title">
+                        <span class="ap-card-icon" style="color:${meta.color}">${meta.icon}</span>
+                        <span class="ap-card-name">${meta.label}</span>
+                        <span class="ap-card-count" style="background:${count > 0 ? meta.color : '#CBD5E1'}">${count}</span>
+                    </div>
+                    <div class="ap-card-right">
+                        ${catData.educational_tip ? `<span class="ap-learn-more" title="${_esc(catData.educational_tip)}">📖 Learn</span>` : ''}
+                        <span class="ap-card-chevron ${expanded && count > 0 ? 'ap-open' : ''}">${count > 0 ? '▾' : '—'}</span>
+                    </div>
+                </div>
+                ${catData.educational_tip && count > 0 ? `<div class="ap-tip">${_esc(catData.educational_tip)}</div>` : ''}
+                <div class="ap-card-body ${count > 0 ? 'ap-expanded' : 'ap-collapsed'}" id="ap-body-${catKey}">
+                    ${instancesHtml}
+                </div>
+            </div>`;
+    }
+
+    return `
+        <div class="ap-container animate-fade-in">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="font-semibold text-gray-900 text-lg flex items-center">
+                    <span class="text-2xl mr-2">🚫</span> Writing Anti-Patterns
+                </h3>
+                <div class="flex gap-2">
+                    <button id="ap-expand-all" class="ap-toolbar-btn">▸ Expand All</button>
+                    <button id="ap-collapse-all" class="ap-toolbar-btn">▾ Collapse All</button>
+                </div>
+            </div>
+            ${summaryHtml}
+            <div class="ap-cards">
+                ${cardsHtml}
+            </div>
+        </div>`;
+}
+
+// Post-render binding for anti-patterns
+function bindAntiPatternEvents() {
+    // Expand/collapse individual cards
+    document.querySelectorAll('[data-ap-toggle]').forEach(header => {
+        header.addEventListener('click', () => {
+            const catKey = header.dataset.apToggle;
+            const body = document.getElementById('ap-body-' + catKey);
+            const chevron = header.querySelector('.ap-card-chevron');
+            if (!body) return;
+            const isExpanded = body.classList.contains('ap-expanded');
+            if (isExpanded) {
+                body.classList.remove('ap-expanded');
+                body.classList.add('ap-collapsed');
+                if (chevron) { chevron.classList.remove('ap-open'); chevron.textContent = '▸'; }
+            } else {
+                body.classList.remove('ap-collapsed');
+                body.classList.add('ap-expanded');
+                if (chevron) { chevron.classList.add('ap-open'); chevron.textContent = '▾'; }
+            }
+        });
+    });
+
+    // Expand All / Collapse All
+    const expandBtn = document.getElementById('ap-expand-all');
+    const collapseBtn = document.getElementById('ap-collapse-all');
+    if (expandBtn) {
+        expandBtn.addEventListener('click', () => {
+            document.querySelectorAll('.ap-card-body').forEach(b => {
+                b.classList.remove('ap-collapsed');
+                b.classList.add('ap-expanded');
+            });
+            document.querySelectorAll('.ap-card-chevron').forEach(c => {
+                c.classList.add('ap-open');
+                c.textContent = '▾';
+            });
+        });
+    }
+    if (collapseBtn) {
+        collapseBtn.addEventListener('click', () => {
+            document.querySelectorAll('.ap-card-body').forEach(b => {
+                b.classList.remove('ap-expanded');
+                b.classList.add('ap-collapsed');
+            });
+            document.querySelectorAll('.ap-card-chevron').forEach(c => {
+                c.classList.remove('ap-open');
+                c.textContent = '▸';
+            });
+        });
+    }
+}
+
+// ════════════════════════════════════════════════════
+// Render Mind Map Tab — NoteLM-style (Phase 7)
+// ════════════════════════════════════════════════════
+
+const MIND_MAP_GROUP_META = {
+    character:    { label: 'Characters',     icon: '👤', color: '#3B82F6' },
+    organization: { label: 'Organizations',  icon: '🏢', color: '#6366F1' },
+    location:     { label: 'Locations',       icon: '📍', color: '#10B981' },
+    time:         { label: 'Time',            icon: '🕐', color: '#F59E0B' },
+    event:        { label: 'Events',          icon: '⚡', color: '#EC4899' },
+    theme:        { label: 'Themes',          icon: '💡', color: '#F59E0B' },
+    action:       { label: 'Actions',         icon: '🎯', color: '#EF4444' },
+    detail:       { label: 'Details',         icon: '📎', color: '#94A3B8' },
+    concept:      { label: 'Concepts',        icon: '🔮', color: '#8B5CF6' },
+    other:        { label: 'Other',           icon: '📌', color: '#CBD5E1' },
+};
+
+// Track which mind map groups are visible
+let mindMapVisibleGroups = new Set(Object.keys(MIND_MAP_GROUP_META));
+let mindMapNetworkInstance = null;
+
+function renderMindMap() {
+    const mapData = analysisResults.mind_map;
+
+    if (!mapData || mapData.error || !mapData.nodes || mapData.nodes.length === 0) {
+        return `
+            <div class="text-center py-12 text-gray-400 animate-fade-in">
+                <div class="text-5xl mb-4">🧠</div>
+                <p class="text-lg font-medium mb-2">No Mind Map Data</p>
+                <p class="text-sm">The text doesn't contain enough concepts to generate a mind map.<br>
+                Try analyzing longer text with named entities, characters, and themes.</p>
+                ${mapData?.error ? `<p class="text-xs text-red-400 mt-4">Error: ${_esc(mapData.error)}</p>` : ''}
+            </div>`;
+    }
+
+    const { nodes, edges, central_node, stats } = mapData;
+
+    // Group counts for legend
+    const groupCounts = {};
+    for (const n of nodes) {
+        groupCounts[n.group] = (groupCounts[n.group] || 0) + 1;
+    }
+
+    // Legend / filter bar
+    let legendHtml = '<div class="mm-legend">';
+    for (const [grp, meta] of Object.entries(MIND_MAP_GROUP_META)) {
+        const c = groupCounts[grp] || 0;
+        if (c === 0) continue;
+        const active = mindMapVisibleGroups.has(grp);
+        legendHtml += `
+            <button class="mm-legend-btn ${active ? 'active' : 'inactive'}"
+                    data-group="${grp}"
+                    style="--grp-color: ${meta.color}">
+                <span class="mm-legend-dot" style="background:${meta.color}"></span>
+                <span>${meta.icon} ${meta.label}</span>
+                <span class="mm-legend-count">${c}</span>
+            </button>`;
+    }
+    legendHtml += '</div>';
+
+    // Stats bar
+    const statsHtml = `
+        <div class="mm-stats">
+            <span>🧠 <strong>${stats.total_nodes}</strong> concept${stats.total_nodes !== 1 ? 's' : ''}</span>
+            <span class="mm-stats-sep">·</span>
+            <span>🔗 <strong>${stats.total_edges}</strong> connection${stats.total_edges !== 1 ? 's' : ''}</span>
+            <span class="mm-stats-sep">·</span>
+            <span>⭐ Central: <strong>${_esc(central_node || '—')}</strong></span>
+        </div>`;
+
+    // Concept list sidebar
+    let conceptListHtml = '<div class="mm-concept-list">';
+    conceptListHtml += '<h4 class="mm-concept-list-title">Key Concepts</h4>';
+    const sortedNodes = [...nodes].sort((a, b) => b.importance - a.importance);
+    for (const n of sortedNodes) {
+        const meta = MIND_MAP_GROUP_META[n.group] || MIND_MAP_GROUP_META.other;
+        const barWidth = Math.max(4, n.importance);
+        conceptListHtml += `
+            <div class="mm-concept-item" data-node-id="${n.id}" title="${_esc(n.label)} (${n.type})">
+                <div class="mm-concept-icon" style="color:${meta.color}">${meta.icon}</div>
+                <div class="mm-concept-info">
+                    <div class="mm-concept-name">${_esc(n.label)}</div>
+                    <div class="mm-concept-bar-track">
+                        <div class="mm-concept-bar" style="width:${barWidth}%; background:${meta.color}"></div>
+                    </div>
+                </div>
+                <div class="mm-concept-score">${n.importance}</div>
+            </div>`;
+    }
+    conceptListHtml += '</div>';
+
+    return `
+        <div class="mm-container animate-fade-in">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="font-semibold text-gray-900 text-lg flex items-center">
+                    <span class="text-2xl mr-2">🧠</span> Concept Mind Map
+                </h3>
+                <div class="flex gap-2">
+                    <button id="mm-btn-fit" class="mm-toolbar-btn" title="Fit to view">⊞ Fit</button>
+                    <button id="mm-btn-physics" class="mm-toolbar-btn" title="Toggle physics">⚛️ Physics</button>
+                </div>
+            </div>
+            ${statsHtml}
+            ${legendHtml}
+            <div class="mm-layout">
+                <div class="mm-graph-wrap">
+                    <div id="mm-network" class="mm-network"></div>
+                    <div class="mm-hint">Drag to pan · Scroll to zoom · Click node to highlight</div>
+                </div>
+                ${conceptListHtml}
+            </div>
+        </div>`;
+}
+
+/**
+ * Initialize the vis.js Network after the DOM is rendered.
+ */
+function initMindMapNetwork() {
+    const container = document.getElementById('mm-network');
+    if (!container) return;
+
+    const mapData = analysisResults.mind_map;
+    if (!mapData || !mapData.nodes || mapData.nodes.length === 0) return;
+
+    // Filter by visible groups
+    const visibleNodes = mapData.nodes.filter(n => mindMapVisibleGroups.has(n.group));
+    const visibleIds = new Set(visibleNodes.map(n => n.id));
+    const visibleEdges = mapData.edges.filter(e => visibleIds.has(e.from) && visibleIds.has(e.to));
+
+    // Build vis.js DataSets
+    const nodesData = visibleNodes.map(n => ({
+        id: n.id,
+        label: n.label,
+        size: n.size,
+        color: {
+            background: n.color.background,
+            border: n.color.border,
+            highlight: { background: n.color.background, border: '#1E293B' },
+            hover: { background: n.color.background, border: '#1E293B' },
+        },
+        font: {
+            size: n.font_size,
+            color: n.color.fontColor || '#ffffff',
+            strokeWidth: 2,
+            strokeColor: 'rgba(0,0,0,0.3)',
+            face: "'Inter', 'Segoe UI', system-ui, sans-serif",
+            bold: n.is_central ? { color: n.color.fontColor || '#ffffff', size: n.font_size + 2 } : undefined,
+        },
+        shape: n.is_central ? 'star' : 'dot',
+        borderWidth: n.is_central ? 3 : 2,
+        shadow: { enabled: true, color: 'rgba(0,0,0,0.15)', size: 8, x: 2, y: 2 },
+        title: `${n.label}\nType: ${n.type}\nImportance: ${n.importance}%`,
+    }));
+
+    const edgesData = visibleEdges.map((e, i) => ({
+        id: i,
+        from: e.from,
+        to: e.to,
+        label: e.label.length > 18 ? e.label.slice(0, 16) + '…' : e.label,
+        width: e.width,
+        color: { color: '#94A3B8', highlight: '#3B82F6', hover: '#64748B' },
+        font: { size: 9, color: '#64748B', strokeWidth: 0, align: 'middle', face: 'system-ui' },
+        arrows: { to: { enabled: false } },
+        smooth: { type: 'continuous', roundness: 0.3 },
+    }));
+
+    const options = {
+        physics: {
+            enabled: true,
+            solver: 'forceAtlas2Based',
+            forceAtlas2Based: {
+                gravitationalConstant: -40,
+                centralGravity: 0.008,
+                springLength: 140,
+                springConstant: 0.04,
+                damping: 0.4,
+                avoidOverlap: 0.6,
+            },
+            stabilization: { iterations: 200, updateInterval: 25 },
+        },
+        interaction: {
+            hover: true,
+            tooltipDelay: 200,
+            zoomView: true,
+            dragView: true,
+            dragNodes: true,
+            navigationButtons: false,
+            keyboard: false,
+        },
+        layout: {
+            improvedLayout: true,
+            randomSeed: 42,
+        },
+        nodes: {
+            shape: 'dot',
+            scaling: { min: 15, max: 55 },
+        },
+        edges: {
+            smooth: { type: 'continuous' },
+        },
+    };
+
+    // Destroy previous instance
+    if (mindMapNetworkInstance) {
+        mindMapNetworkInstance.destroy();
+        mindMapNetworkInstance = null;
+    }
+
+    const network = new vis.Network(container, { nodes: nodesData, edges: edgesData }, options);
+    mindMapNetworkInstance = network;
+
+    // Click node → highlight in concept list
+    network.on('selectNode', (params) => {
+        const nodeId = params.nodes[0];
+        // highlight concept-list item
+        document.querySelectorAll('.mm-concept-item').forEach(el => {
+            el.classList.toggle('mm-concept-active', parseInt(el.dataset.nodeId) === nodeId);
+        });
+        // highlight connected edges
+        const connectedEdges = network.getConnectedEdges(nodeId);
+        network.selectEdges(connectedEdges);
+    });
+
+    network.on('deselectNode', () => {
+        document.querySelectorAll('.mm-concept-item').forEach(el => {
+            el.classList.remove('mm-concept-active');
+        });
+    });
+
+    // Bind legend filter buttons
+    document.querySelectorAll('.mm-legend-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const grp = btn.dataset.group;
+            if (mindMapVisibleGroups.has(grp)) {
+                mindMapVisibleGroups.delete(grp);
+            } else {
+                mindMapVisibleGroups.add(grp);
+            }
+            // Re-render
+            elements.tabContent.innerHTML = renderMindMap();
+            setTimeout(() => initMindMapNetwork(), 50);
+        });
+    });
+
+    // Concept list click → focus node
+    document.querySelectorAll('.mm-concept-item').forEach(el => {
+        el.addEventListener('click', () => {
+            const nodeId = parseInt(el.dataset.nodeId);
+            network.selectNodes([nodeId]);
+            network.focus(nodeId, { scale: 1.2, animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+            document.querySelectorAll('.mm-concept-item').forEach(e => e.classList.remove('mm-concept-active'));
+            el.classList.add('mm-concept-active');
+        });
+    });
+
+    // Toolbar buttons
+    const fitBtn = document.getElementById('mm-btn-fit');
+    const physicsBtn = document.getElementById('mm-btn-physics');
+
+    if (fitBtn) {
+        fitBtn.addEventListener('click', () => {
+            network.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+        });
+    }
+
+    let physicsOn = true;
+    if (physicsBtn) {
+        physicsBtn.addEventListener('click', () => {
+            physicsOn = !physicsOn;
+            network.setOptions({ physics: { enabled: physicsOn } });
+            physicsBtn.textContent = physicsOn ? '⚛️ Physics' : '📌 Locked';
+        });
+    }
+
+    // Fit after stabilization
+    network.once('stabilizationIterationsDone', () => {
+        network.fit({ animation: { duration: 300, easingFunction: 'easeInOutQuad' } });
     });
 }
 
@@ -534,7 +1233,7 @@ function renderEnhancements() {
     if (vocabulary_complexity) {
         const diversity = vocabulary_complexity.lexical_diversity || 0;
         const level = vocabulary_complexity.complexity_level || 'basic';
-        const advancedWords = vocabulary_complexity.advanced_word_count || 0;
+        const advancedWords = vocabulary_complexity.advanced_words || 0;
         
         html += `
             <div class="feature-card border-l-4 border-purple-500">
@@ -566,9 +1265,9 @@ function renderEnhancements() {
     
     // Filler Words
     if (filler_words) {
-        const totalFillers = filler_words.total_count || 0;
-        const uniqueFillers = filler_words.unique_count || 0;
-        const fillersList = filler_words.fillers || [];
+        const totalFillers = filler_words.total_fillers || 0;
+        const uniqueFillers = filler_words.unique_fillers || 0;
+        const fillersList = filler_words.filler_details || {};
         
         html += `
             <div class="feature-card border-l-4 border-yellow-500">
@@ -586,7 +1285,7 @@ function renderEnhancements() {
                             <strong>${uniqueFillers}</strong> unique filler words detected
                         </div>
                         <div class="flex flex-wrap gap-2">
-                            ${Object.entries(fillersList.slice(0, 15)).map(([word, count]) => `
+                            ${Object.entries(fillersList).slice(0, 15).map(([word, count]) => `
                                 <span class="px-3 py-1 bg-yellow-200 text-yellow-900 rounded-full text-sm">
                                     ${word} <span class="font-bold ml-1">×${count}</span>
                                 </span>
@@ -606,7 +1305,7 @@ function renderEnhancements() {
     // Clichés
     if (cliches) {
         const clichesList = cliches.cliches || [];
-        const clicheCount = cliches.cliche_count || 0;
+        const clicheCount = cliches.cliches_found || 0;
         
         html += `
             <div class="feature-card border-l-4 border-pink-500">
@@ -645,7 +1344,7 @@ function renderEnhancements() {
     
     // Paragraph Structure
     if (paragraph_structure) {
-        const avgLength = paragraph_structure.avg_paragraph_length || 0;
+        const avgLength = paragraph_structure.average_words_per_paragraph || 0;
         const paragraphs = paragraph_structure.paragraph_count || 0;
         
         html += `
@@ -675,8 +1374,8 @@ function renderEnhancements() {
     // Lexical Density
     if (lexical_density) {
         const density = lexical_density.lexical_density || 0;
-        const contentWords = lexical_density.content_word_count || 0;
-        const totalWords = lexical_density.total_word_count || 0;
+        const contentWords = lexical_density.content_words || 0;
+        const totalWords = lexical_density.total_words || 0;
         
         html += `
             <div class="feature-card border-l-4 border-teal-500">
@@ -707,7 +1406,7 @@ function renderEnhancements() {
     
     // Sentence Rhythm
     if (sentence_rhythm) {
-        const pattern = sentence_rhythm.rhythm_pattern || 'unknown';
+        const pattern = sentence_rhythm.pattern || 'unknown';
         const score = sentence_rhythm.rhythm_score || 0;
         
         html += `
@@ -736,6 +1435,133 @@ function renderEnhancements() {
     
     html += '</div>';
     return html;
+}
+
+// ── Render Tone Tab ──
+function renderTone() {
+    const tone = analysisResults.tone_analysis;
+    if (!tone || tone.error) {
+        return `<div class="text-center py-12 text-gray-500">
+            <div class="text-4xl mb-2">🎭</div>
+            <p>Tone analysis unavailable${tone && tone.error ? ': ' + tone.error : ''}</p>
+        </div>`;
+    }
+
+    const scores = tone.tone_scores || {};
+    const dominant = tone.dominant_tone || 'professional';
+    const label = tone.tone_label || dominant;
+    const description = tone.tone_description || '';
+    const color = tone.tone_color || '#3B82F6';
+    const perSentence = tone.per_sentence || [];
+    const defs = tone.tone_definitions || {};
+
+    // Build radar-style bar chart
+    const toneKeys = Object.keys(scores);
+    const maxScore = Math.max(...Object.values(scores), 0.01);
+
+    let barsHtml = toneKeys.map(key => {
+        const val = scores[key] || 0;
+        const pct = Math.round((val / 1) * 100); // 0-1 → 0-100
+        const def = defs[key] || {};
+        const c = def.color || '#6B7280';
+        const active = key === dominant ? 'ring-2 ring-offset-1' : '';
+        return `
+            <div class="flex items-center gap-3 ${active} rounded-lg p-2" style="${key === dominant ? 'ring-color:' + c : ''}">
+                <span class="w-28 text-sm font-medium text-gray-700 capitalize">${def.label || key}</span>
+                <div class="flex-1 bg-gray-200 rounded-full h-3 relative overflow-hidden">
+                    <div class="h-3 rounded-full transition-all duration-700" style="width:${pct}%; background:${c}"></div>
+                </div>
+                <span class="w-12 text-right text-sm font-semibold" style="color:${c}">${(val * 100).toFixed(0)}%</span>
+            </div>
+        `;
+    }).join('');
+
+    // Per-sentence tone trajectory
+    let trajectoryHtml = '';
+    if (perSentence.length > 0) {
+        const sentRows = perSentence.map((s, idx) => {
+            const sDef = defs[s.dominant] || {};
+            const sColor = sDef.color || '#6B7280';
+            return `
+                <div class="flex items-start gap-3 py-2 border-b border-gray-100 last:border-0">
+                    <span class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white" style="background:${sColor}">${idx + 1}</span>
+                    <div class="flex-1 min-w-0">
+                        <p class="text-sm text-gray-700 truncate" title="${s.text}">${truncateText(s.text, 120)}</p>
+                        <span class="text-xs font-medium capitalize" style="color:${sColor}">${sDef.label || s.dominant}</span>
+                    </div>
+                    <div class="flex-shrink-0 flex gap-0.5">
+                        ${toneKeys.map(k => {
+                            const sv = s.scores[k] || 0;
+                            const sc = (defs[k] || {}).color || '#E5E7EB';
+                            const opacity = Math.max(0.15, sv);
+                            return `<div class="w-2 h-6 rounded-sm" style="background:${sc}; opacity:${opacity}" title="${k}: ${(sv*100).toFixed(0)}%"></div>`;
+                        }).join('')}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        trajectoryHtml = `
+            <div class="mt-6">
+                <h4 class="font-semibold text-gray-900 mb-3 flex items-center">
+                    <span class="text-lg mr-2">📈</span> Tone Trajectory (per sentence)
+                </h4>
+                <div class="bg-gray-50 rounded-lg p-4 max-h-80 overflow-y-auto space-y-0">
+                    ${sentRows}
+                </div>
+            </div>
+        `;
+    }
+
+    // Tone transformation result (if target tone was set)
+    let transformHtml = '';
+    const tt = analysisResults.tone_transformation || analysisResults.tone_analysis?.tone_transformation;
+    if (tt && tt.transformed && tt.change_count > 0) {
+        transformHtml = `
+            <div class="mt-6 border-l-4 border-amber-500 rounded-lg bg-amber-50 p-4">
+                <h4 class="font-semibold text-amber-900 mb-2 flex items-center">
+                    <span class="text-lg mr-2">🔄</span> Tone Transformation → ${tt.tone_label || tt.target_tone}
+                </h4>
+                <p class="text-sm text-gray-700 mb-3">${tt.change_count} change(s) applied</p>
+                <div class="bg-white rounded-lg p-3 text-sm text-gray-800 whitespace-pre-wrap">${tt.transformed}</div>
+                ${tt.changes && tt.changes.length ? `
+                    <div class="mt-3 space-y-1">
+                        ${tt.changes.slice(0, 10).map(c => `
+                            <div class="text-xs text-amber-800"><span class="line-through">${c.original}</span> → <span class="font-semibold">${c.replacement}</span></div>
+                        `).join('')}
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }
+
+    return `
+        <div class="space-y-6 animate-fade-in">
+            <!-- Dominant Tone Header -->
+            <div class="rounded-xl p-6" style="background: linear-gradient(135deg, ${color}15, ${color}30)">
+                <div class="flex items-center justify-between mb-4">
+                    <div>
+                        <h3 class="text-xl font-bold text-gray-900 flex items-center">
+                            <span class="text-3xl mr-3">🎭</span> Tone Analysis
+                        </h3>
+                        <p class="text-sm text-gray-600 mt-1">${description}</p>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-3xl font-bold capitalize" style="color:${color}">${label}</div>
+                        <div class="text-xs text-gray-500">Dominant Tone</div>
+                    </div>
+                </div>
+
+                <!-- Tone Scores Bar Chart -->
+                <div class="space-y-2 mt-4">
+                    ${barsHtml}
+                </div>
+            </div>
+
+            ${trajectoryHtml}
+            ${transformHtml}
+        </div>
+    `;
 }
 
 // Render Issues Tab
@@ -954,6 +1780,7 @@ function renderTransform() {
                 </div>
                 <h3 class="text-2xl font-semibold text-gray-900">Style Transformation Disabled</h3>
                 <p class="text-gray-500 mt-2">Enable "Style Transformation" in the feature toggles and re-analyze to see results.</p>
+                ${renderStyleHeatmap()}
             </div>
         `;
     }
@@ -1017,8 +1844,249 @@ function renderTransform() {
                     ✨ Copy Transformed
                 </button>
             </div>
+
+            ${renderStyleHeatmap()}
         </div>
     `;
+}
+
+// Render Style Heatmap
+function renderStyleHeatmap() {
+    const styleScores = analysisResults.style_scores;
+    if (!styleScores || styleScores.length === 0) return '';
+
+    const dimensions = ['formality', 'casualness', 'creativity', 'persuasiveness', 'journalistic', 'narrative'];
+    const dimColors = {
+        formality: '#3B82F6',
+        casualness: '#10B981',
+        creativity: '#8B5CF6',
+        persuasiveness: '#F59E0B',
+        journalistic: '#6366F1',
+        narrative: '#EC4899'
+    };
+    const dimEmojis = {
+        formality: '🏛️',
+        casualness: '😊',
+        creativity: '🎨',
+        persuasiveness: '💪',
+        journalistic: '📰',
+        narrative: '📖'
+    };
+
+    return `
+        <div class="mt-8">
+            <h4 class="font-semibold text-gray-900 mb-4 flex items-center text-lg">
+                <span class="mr-2">🎨</span> Style Heatmap by Paragraph
+            </h4>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm border-collapse">
+                    <thead>
+                        <tr>
+                            <th class="text-left p-2 text-gray-600 font-medium border-b border-gray-200">Paragraph</th>
+                            ${dimensions.map(d => `
+                                <th class="p-2 text-center text-gray-600 font-medium border-b border-gray-200" title="${d}">
+                                    ${dimEmojis[d]}<br><span class="text-xs">${d.charAt(0).toUpperCase() + d.slice(1)}</span>
+                                </th>
+                            `).join('')}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${styleScores.map((para, idx) => `
+                            <tr class="hover:bg-gray-50">
+                                <td class="p-2 border-b border-gray-100 max-w-[200px] truncate text-gray-700" title="${escapeHtml(para.text_preview)}">
+                                    <span class="font-medium text-gray-500">P${idx + 1}</span> ${escapeHtml(para.text_preview)}
+                                </td>
+                                ${dimensions.map(d => {
+                                    const score = para.scores[d] || 0;
+                                    const opacity = Math.max(0.1, score / 100);
+                                    const color = dimColors[d];
+                                    return `
+                                        <td class="p-2 border-b border-gray-100 text-center">
+                                            <div class="inline-flex items-center justify-center w-10 h-10 rounded-lg text-xs font-bold"
+                                                 style="background-color: ${color}${Math.round(opacity * 255).toString(16).padStart(2, '0')}; color: ${score > 50 ? 'white' : '#374151'}">
+                                                ${score}
+                                            </div>
+                                        </td>
+                                    `;
+                                }).join('')}
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-xs text-gray-500 mt-2">Higher scores indicate stronger presence of that style dimension (0-100)</p>
+        </div>
+    `;
+}
+
+            </div>
+            <p class="text-xs text-gray-500 mt-2">Higher scores indicate stronger presence of that style dimension (0-100)</p>
+        </div>
+    `;
+}
+
+// ── Render Narrative Tab (Phase 5) ──────────────────────────────────
+function renderNarrative() {
+    const nt = analysisResults.narrative_tracker;
+    if (!nt || nt.error) {
+        return `<div class="text-center py-12 text-gray-500">
+            <p class="text-4xl mb-3">📖</p>
+            <p class="font-medium">Narrative tracking data not available</p>
+            <p class="text-sm mt-1">${nt?.error || 'Submit text to generate narrative analysis'}</p>
+        </div>`;
+    }
+
+    let html = `<div class="space-y-6 animate-fade-in">`;
+
+    // ── Summary Cards ─────────────────────────────────────────────
+    const summary = nt.narrative_timeline?.summary || {};
+    html += `
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+            ${_narrativeCard('📝', 'Events', summary.total_events ?? 0)}
+            ${_narrativeCard('👤', 'Characters', summary.unique_characters ?? 0)}
+            ${_narrativeCard('📍', 'Locations', summary.unique_locations ?? 0)}
+            ${_narrativeCard('💬', 'Dialogue Lines', nt.dialogue?.total_quotes ?? 0)}
+            ${_narrativeCard('⏱️', 'Pace Score', nt.pacing?.pace_score ?? '—')}
+        </div>
+    `;
+
+    // ── Pacing ────────────────────────────────────────────────────
+    if (nt.pacing) {
+        const p = nt.pacing;
+        html += `<div class="bg-white rounded-lg border p-4">
+            <h3 class="font-semibold text-gray-900 mb-3">⏱️ Pacing Analysis</h3>
+            <p class="text-sm text-gray-600 mb-3">${p.interpretation || ''}</p>
+            <div class="grid grid-cols-3 gap-4 mb-2">`;
+        for (const [type, ratio] of Object.entries(p.ratios || {})) {
+            const pct = (ratio * 100).toFixed(1);
+            const color = type === 'dialogue' ? 'blue' : type === 'action' ? 'red' : 'gray';
+            html += `<div>
+                <div class="flex justify-between text-xs mb-1">
+                    <span class="capitalize">${type}</span><span>${pct}%</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div class="bg-${color}-500 h-2 rounded-full" style="width:${pct}%"></div>
+                </div>
+            </div>`;
+        }
+        html += `</div>
+            <p class="text-xs text-gray-400">Avg block length: ${p.avg_block_length ?? '—'} sentences</p>
+        </div>`;
+    }
+
+    // ── Dialogue ──────────────────────────────────────────────────
+    if (nt.dialogue && nt.dialogue.total_quotes > 0) {
+        const d = nt.dialogue;
+        html += `<div class="bg-white rounded-lg border p-4">
+            <h3 class="font-semibold text-gray-900 mb-3">💬 Dialogue Breakdown</h3>
+            <div class="flex gap-6 text-sm text-gray-600 mb-3">
+                <span>Dialogue ratio: <strong>${(d.dialogue_ratio * 100).toFixed(1)}%</strong></span>
+                <span>Narration ratio: <strong>${(d.narration_ratio * 100).toFixed(1)}%</strong></span>
+            </div>`;
+        if (Object.keys(d.speaker_lines || {}).length > 0) {
+            html += `<h4 class="text-xs font-semibold text-gray-500 uppercase mb-2">Speaker Attribution</h4>
+            <div class="flex flex-wrap gap-2">`;
+            for (const [speaker, count] of Object.entries(d.speaker_lines)) {
+                html += `<span class="px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-sm">${speaker}: ${count} line${count > 1 ? 's' : ''}</span>`;
+            }
+            html += `</div>`;
+        }
+        if (d.quotes && d.quotes.length > 0) {
+            html += `<div class="mt-3 space-y-2 max-h-48 overflow-y-auto">`;
+            for (const q of d.quotes.slice(0, 15)) {
+                html += `<div class="text-sm border-l-2 border-blue-300 pl-3 py-1">
+                    <span class="text-gray-800">"${_esc(q.content)}"</span>
+                    ${q.speaker ? `<span class="text-xs text-gray-400 ml-2">— ${_esc(q.speaker)}</span>` : ''}
+                </div>`;
+            }
+            if (d.quotes.length > 15) html += `<p class="text-xs text-gray-400">+${d.quotes.length - 15} more quotes</p>`;
+            html += `</div>`;
+        }
+        html += `</div>`;
+    }
+
+    // ── Plot Events ───────────────────────────────────────────────
+    if (nt.plot_events && nt.plot_events.length > 0) {
+        html += `<div class="bg-white rounded-lg border p-4">
+            <h3 class="font-semibold text-gray-900 mb-3">📝 Plot Events (${nt.plot_events.length})</h3>
+            <div class="space-y-2 max-h-64 overflow-y-auto">`;
+        for (const ev of nt.plot_events.slice(0, 20)) {
+            const tenseBadge = ev.tense ? `<span class="text-xs px-1.5 py-0.5 rounded bg-purple-50 text-purple-600">${ev.tense}</span>` : '';
+            html += `<div class="flex items-start gap-2 text-sm">
+                <span class="text-gray-400 w-6 text-right shrink-0">#${ev.sentence_index}</span>
+                <span class="font-medium text-indigo-700">${_esc(ev.subject || '?')}</span>
+                <span class="text-gray-800">→ ${_esc(ev.verb_text)}</span>
+                ${tenseBadge}
+            </div>`;
+        }
+        if (nt.plot_events.length > 20) html += `<p class="text-xs text-gray-400 mt-1">+${nt.plot_events.length - 20} more events</p>`;
+        html += `</div></div>`;
+    }
+
+    // ── Settings / Locations ──────────────────────────────────────
+    if (nt.settings && nt.settings.length > 0) {
+        html += `<div class="bg-white rounded-lg border p-4">
+            <h3 class="font-semibold text-gray-900 mb-3">📍 Settings & Locations</h3>
+            <div class="space-y-2 max-h-48 overflow-y-auto">`;
+        for (const s of nt.settings) {
+            const locs = (s.locations || []).map(l => `<span class="entity-tag entity-${l.type.toLowerCase()}">${_esc(l.text)}</span>`).join(' ');
+            const spatial = (s.spatial_phrases || []).map(p => `<span class="text-xs text-gray-500 italic">${_esc(p)}</span>`).join(', ');
+            html += `<div class="text-sm">
+                <span class="text-gray-400 mr-2">#${s.sentence_index}</span>${locs} ${spatial}
+            </div>`;
+        }
+        html += `</div></div>`;
+    }
+
+    // ── Narrative Timeline ────────────────────────────────────────
+    if (nt.narrative_timeline?.timeline && nt.narrative_timeline.timeline.length > 0) {
+        html += `<div class="bg-white rounded-lg border p-4">
+            <h3 class="font-semibold text-gray-900 mb-3">🗺️ Narrative Timeline</h3>
+            <div class="space-y-3 max-h-72 overflow-y-auto">`;
+        for (const entry of nt.narrative_timeline.timeline.slice(0, 30)) {
+            html += `<div class="flex gap-3 text-sm border-l-2 border-indigo-200 pl-3 py-1">
+                <span class="text-gray-400 shrink-0 w-7 text-right">#${entry.sentence_index}</span>
+                <div class="space-y-0.5">`;
+            if (entry.characters) html += `<div>👤 ${entry.characters.map(c => `<span class="font-medium text-indigo-700">${_esc(c)}</span>`).join(', ')}</div>`;
+            if (entry.events) html += `<div>⚡ ${entry.events.map(e => `${_esc(e.subject || '?')} → <em>${_esc(e.verb)}</em>`).join('; ')}</div>`;
+            if (entry.locations) html += `<div>📍 ${entry.locations.map(l => _esc(l.text)).join(', ')}</div>`;
+            if (entry.has_dialogue) html += `<div class="text-blue-500 text-xs">💬 dialogue</div>`;
+            html += `</div></div>`;
+        }
+        if (nt.narrative_timeline.timeline.length > 30) html += `<p class="text-xs text-gray-400 mt-1">+${nt.narrative_timeline.timeline.length - 30} more entries</p>`;
+        html += `</div></div>`;
+    }
+
+    // ── Character Memory ──────────────────────────────────────────
+    if (nt.character_memory && Object.keys(nt.character_memory).length > 0) {
+        html += `<div class="bg-white rounded-lg border p-4">
+            <h3 class="font-semibold text-gray-900 mb-3">🧠 Character Memory</h3>
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-3">`;
+        for (const [key, data] of Object.entries(nt.character_memory)) {
+            html += `<div class="p-3 rounded-lg bg-gray-50 border">
+                <p class="font-medium text-gray-900">${_esc(data.canonical_name)}</p>
+                <p class="text-xs text-gray-500">${data.type} · ${data.mention_count} mention${data.mention_count !== 1 ? 's' : ''}</p>
+                <p class="text-xs text-gray-400">First seen: sentence #${data.first_mention_sentence ?? '?'}</p>
+            </div>`;
+        }
+        html += `</div></div>`;
+    }
+
+    html += `</div>`;
+    return html;
+}
+
+function _narrativeCard(emoji, label, value) {
+    return `<div class="bg-white rounded-lg border p-3 text-center">
+        <p class="text-2xl mb-1">${emoji}</p>
+        <p class="text-lg font-bold text-gray-900">${value}</p>
+        <p class="text-xs text-gray-500">${label}</p>
+    </div>`;
+}
+
+function _esc(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // Render Details Tab

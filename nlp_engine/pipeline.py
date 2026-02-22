@@ -13,6 +13,9 @@ from . import enhancer
 from . import style_transformer
 from . import consistency_checker
 from . import explanation
+from . import grammar_checker
+from . import concept_extractor
+from . import antipatterns
 
 
 class WritingAssistant:
@@ -73,8 +76,11 @@ class WritingAssistant:
             "flow": True,
             "style": True,
             "consistency": True,
+            "grammar": True,
             "transform": False,
-            "explanations": True
+            "explanations": True,
+            "mind_map": True,
+            "antipatterns": True
         }
         features = {**default_features, **(features or {})}
         
@@ -106,11 +112,13 @@ class WritingAssistant:
             # Detect issues
             long_sentences = text_analyzer.detect_long_sentences(
                 analysis["sentences"], 
-                self.long_sentence_threshold
+                self.long_sentence_threshold,
+                original_text=text
             )
             repeated_words = text_analyzer.detect_repeated_words(
                 analysis["tokens"],
-                self.repeated_word_min_count
+                self.repeated_word_min_count,
+                original_text=text
             )
             sentence_structures = text_analyzer.analyze_sentence_structure(doc)
             
@@ -118,12 +126,18 @@ class WritingAssistant:
             passive_voice = text_analyzer.detect_passive_voice(doc)
             sentiment = text_analyzer.analyze_sentiment(doc)
             vocabulary_complexity = text_analyzer.analyze_vocabulary_complexity(doc, analysis["tokens"])
-            filler_words = text_analyzer.detect_filler_words(analysis["tokens"])
+            filler_words = text_analyzer.detect_filler_words(analysis["tokens"], original_text=text)
             
             results["text_analysis"]["sentence_structures"] = sentence_structures
             
             # Store enhanced features at top level for API response
-            results["passive_voice"] = passive_voice
+            # Wrap passive voice list in dict with stats for frontend
+            sentence_count = len(list(doc.sents))
+            results["passive_voice"] = {
+                "passive_count": len(passive_voice),
+                "passive_percentage": round((len(passive_voice) / sentence_count * 100) if sentence_count > 0 else 0, 1),
+                "passive_instances": passive_voice
+            }
             results["sentiment"] = sentiment
             results["vocabulary_complexity"] = vocabulary_complexity
             results["filler_words"] = filler_words
@@ -135,6 +149,37 @@ class WritingAssistant:
             # Still need doc for other analyses
             doc = self.nlp(text)
             analysis = {"sentences": [], "tokens": [], "entities": []}
+        
+        # Grammar analysis (needs doc)
+        if features.get("grammar", True):
+            try:
+                results["grammar_analysis"] = grammar_checker.check_grammar(doc, text)
+                # Add grammar issues to the issues dict
+                grammar_issues = results["grammar_analysis"].get("all_issues", [])
+                if grammar_issues:
+                    results["issues"]["grammar"] = grammar_issues
+            except Exception as e:
+                results["grammar_analysis"] = {"error": str(e), "total_issues": 0, "grammar_score": 100}
+        
+        # Tone analysis (needs doc)
+        try:
+            results["tone_analysis"] = style_transformer.analyze_tone(doc, text)
+        except Exception as e:
+            results["tone_analysis"] = {"error": str(e), "dominant_tone": "unknown", "tone_scores": {}}
+        
+        # Tone transformation (if a specific target tone was requested)
+        target_tone = self.config.get("target_tone_value")
+        if target_tone and target_tone != "auto":
+            try:
+                results["tone_analysis"]["tone_transformation"] = style_transformer.transform_tone(text, doc, target_tone)
+            except Exception as e:
+                results["tone_analysis"]["tone_transformation"] = {"error": str(e)}
+        
+        # Narrative tracker (Phase 5 — needs doc + text)
+        try:
+            results["narrative_tracker"] = consistency_checker.run_narrative_tracker(text, doc)
+        except Exception as e:
+            results["narrative_tracker"] = {"error": str(e)}
         
         # Parallel processing of independent analyses
         if self.enable_parallel:
@@ -152,6 +197,23 @@ class WritingAssistant:
         
         # Calculate aggregate scores
         results["scores"] = self._calculate_scores(results)
+        
+        # Aggregate all annotations for inline highlights
+        results["annotations"] = self.aggregate_annotations(results, text)
+        
+        # Mind map (Phase 7)
+        if features.get("mind_map", True):
+            try:
+                results["mind_map"] = concept_extractor.generate_mind_map_data(doc, text)
+            except Exception as e:
+                results["mind_map"] = {"error": str(e), "nodes": [], "edges": []}
+        
+        # Anti-patterns (Phase 8)
+        if features.get("antipatterns", True):
+            try:
+                results["antipatterns"] = antipatterns.detect_all_antipatterns(doc, text)
+            except Exception as e:
+                results["antipatterns"] = {"error": str(e), "categories": {}, "summary": {"total": 0, "critical": 0, "moderate": 0, "minor": 0}}
         
         return results
     
@@ -220,6 +282,9 @@ class WritingAssistant:
             futures["cliches"] = executor.submit(
                 style_transformer.detect_cliches, text
             )
+            futures["style_scores"] = executor.submit(
+                style_transformer.score_style_per_paragraph, text, doc
+            )
             
             # Collect results
             for key, future in futures.items():
@@ -254,6 +319,8 @@ class WritingAssistant:
                         # Store cliche list in issues if any found
                         if result.get("cliches") and isinstance(result["cliches"], list):
                             results["issues"]["cliches"] = result["cliches"]
+                    elif key == "style_scores":
+                        results["style_scores"] = result
                 except Exception as e:
                     results[key] = {"error": str(e)}
         
@@ -287,6 +354,7 @@ class WritingAssistant:
         
         if features["style"]:
             results["style_analysis"] = style_transformer.analyze_current_style(text)
+            results["style_scores"] = style_transformer.score_style_per_paragraph(text, doc)
         
         if features["consistency"]:
             results["consistency"] = self._analyze_consistency_combined(
@@ -358,6 +426,126 @@ class WritingAssistant:
         
         return base_analysis
     
+    @staticmethod
+    def aggregate_annotations(results: Dict[str, Any], text: str) -> List[Dict[str, Any]]:
+        """
+        Collect all position-based issues from every NLP module into a single
+        sorted annotation list for the frontend inline-highlight renderer.
+
+        Each annotation has the schema:
+            {type, start, end, text, message, severity, suggestion, category}
+        """
+        annotations: List[Dict[str, Any]] = []
+
+        def _add(start, end, msg, severity, suggestion, category):
+            """Helper to append an annotation if offsets are valid."""
+            if start is None or end is None or start < 0 or end < 0:
+                return
+            annotations.append({
+                "type": category,
+                "start": int(start),
+                "end": int(end),
+                "text": text[int(start):int(end)] if int(end) <= len(text) else "",
+                "message": msg,
+                "severity": severity or "info",
+                "suggestion": suggestion or "",
+                "category": category,
+            })
+
+        # 1. Grammar issues (grammar_checker — already have start_offset / end_offset)
+        for issue in results.get("grammar_analysis", {}).get("all_issues", []):
+            _add(
+                issue.get("start_offset"),
+                issue.get("end_offset"),
+                issue.get("issue", "Grammar issue"),
+                issue.get("severity", "warning"),
+                issue.get("suggestion"),
+                "grammar",
+            )
+
+        # 2. Passive voice instances
+        for pv in results.get("passive_voice", {}).get("passive_instances", []):
+            _add(
+                pv.get("start_offset"),
+                pv.get("end_offset"),
+                f"Passive voice: {', '.join(pv.get('passive_constructions', []))}",
+                pv.get("severity", "medium"),
+                pv.get("suggestion", "Consider active voice"),
+                "passive",
+            )
+
+        # 3. Filler word occurrences
+        for occ in results.get("filler_words", {}).get("occurrences", []):
+            _add(
+                occ.get("start_offset"),
+                occ.get("end_offset"),
+                f"Filler word: '{occ.get('filler', '')}'",
+                "low",
+                "Remove this filler word for more concise writing",
+                "filler",
+            )
+
+        # 4. Cliché occurrences
+        for cl in results.get("cliches", {}).get("cliches", []):
+            _add(
+                cl.get("start_offset"),
+                cl.get("end_offset"),
+                f"Cliché: '{cl.get('cliche', '')}'",
+                "medium",
+                cl.get("suggestion", "Replace with original phrasing"),
+                "cliche",
+            )
+
+        # 5. Long sentences
+        for ls in results.get("issues", {}).get("long_sentences", []):
+            _add(
+                ls.get("start_offset"),
+                ls.get("end_offset"),
+                f"Long sentence ({ls.get('word_count', '?')} words, {ls.get('excess', '?')} over limit)",
+                ls.get("severity", "medium"),
+                "Break into shorter sentences for readability",
+                "style",
+            )
+
+        # 6. Tense consistency issues
+        for ti in results.get("consistency", {}).get("tense", {}).get("issues", []):
+            _add(
+                ti.get("start_offset"),
+                ti.get("end_offset"),
+                f"Tense shift: uses '{ti.get('tense')}' but document is '{ti.get('expected')}'",
+                ti.get("severity", "medium"),
+                f"Consider using {ti.get('expected', 'dominant')} tense for consistency",
+                "tense",
+            )
+
+        # 7. Perspective shifts
+        for ps in results.get("consistency", {}).get("perspective", {}).get("perspective_shifts", []):
+            _add(
+                ps.get("start_offset"),
+                ps.get("end_offset"),
+                f"Perspective shift: {ps.get('from_perspective')} → {ps.get('to_perspective')}",
+                ps.get("severity", "medium"),
+                "Maintain consistent narrative perspective",
+                "perspective",
+            )
+
+        # 8. Repeated words (from occurrences sub-list)
+        for rw in results.get("issues", {}).get("repeated_words", []):
+            word = rw.get("word", "")
+            for occ in rw.get("occurrences", []):
+                _add(
+                    occ.get("start_offset"),
+                    occ.get("end_offset"),
+                    f"Repeated word: '{word}' (appears {rw.get('count', '?')} times)",
+                    rw.get("severity", "medium"),
+                    f"Consider a synonym or restructure to reduce repetition of '{word}'",
+                    "repetition",
+                )
+
+        # Sort by position
+        annotations.sort(key=lambda a: (a["start"], a["end"]))
+        return annotations
+
     def _calculate_scores(self, results: Dict[str, Any]) -> Dict[str, Any]:
         """Calculate aggregate scores from analysis results."""
         scores = {}
@@ -501,9 +689,15 @@ class WritingAssistant:
         """
         doc = self.nlp(text)
         
+        passive_list = text_analyzer.detect_passive_voice(doc)
+        sentence_count = len(list(doc.sents))
         return {
-            "passive_voice": text_analyzer.detect_passive_voice(doc),
-            "filler_words": text_analyzer.detect_filler_words(text.split()),
+            "passive_voice": {
+                "passive_count": len(passive_list),
+                "passive_percentage": round((len(passive_list) / sentence_count * 100) if sentence_count > 0 else 0, 1),
+                "passive_instances": passive_list
+            },
+            "filler_words": text_analyzer.detect_filler_words(text.split(), original_text=text),
             "cliches": style_transformer.detect_cliches(text),
             "sentiment": text_analyzer.analyze_sentiment(doc),
             "summary": f"Quick scan found potential improvements in {len(text.split())} words"
