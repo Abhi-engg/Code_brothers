@@ -227,7 +227,7 @@ function renderTab(tab) {
     });
 
     if (tab === 'write')        bindWriteTabEvents();
-    if (tab === 'insights')     setTimeout(() => initMindMapNetwork(), 60);
+    if (tab === 'insights')     requestAnimationFrame(() => setTimeout(() => initMindMapNetwork(), 200));
     if (tab === 'antipatterns')  setTimeout(() => bindAntiPatternEvents(), 60);
 }
 
@@ -928,28 +928,67 @@ function renderInsights() {
     return html;
 }
 
-function initMindMapNetwork() {
+function initMindMapNetwork(retryCount) {
+    retryCount = retryCount || 0;
+
+    // Guard: vis.js must be loaded
+    if (typeof vis === 'undefined' || typeof vis.Network !== 'function') {
+        console.error('[MindMap] vis-network library not loaded');
+        return;
+    }
+
     const container = document.getElementById('mm-network');
-    if (!container) return;
+    if (!container) { console.warn('[MindMap] container #mm-network not found'); return; }
+
+    // Ensure the container has real dimensions; retry if 0 (flex not yet resolved)
+    const cw = container.offsetWidth, ch = container.offsetHeight;
+    if ((cw === 0 || ch === 0) && retryCount < 5) {
+        console.info(`[MindMap] container ${cw}x${ch}, retry ${retryCount+1}/5`);
+        setTimeout(() => initMindMapNetwork(retryCount + 1), 200);
+        return;
+    }
+    // Force explicit dimensions so vis.js canvas doesn't collapse
+    container.style.width  = Math.max(cw, 300) + 'px';
+    container.style.height = Math.max(ch, 400) + 'px';
+
     const mapData = analysisResults.mind_map;
     if (!mapData || !mapData.nodes || mapData.nodes.length === 0) return;
 
     const visibleNodes = mapData.nodes.filter(n => mindMapVisibleGroups.has(n.group));
     const visibleIds = new Set(visibleNodes.map(n => n.id));
-    const visibleEdges = mapData.edges.filter(e => visibleIds.has(e.from) && visibleIds.has(e.to));
+    const visibleEdges = (mapData.edges || []).filter(e => visibleIds.has(e.from) && visibleIds.has(e.to));
 
-    const nodesData = visibleNodes.map(n => ({
-        id: n.id, label: n.label, size: n.size,
-        color: { background: n.color.background, border: n.color.border, highlight: { background: n.color.background, border: '#1E293B' }, hover: { background: n.color.background, border: '#1E293B' } },
-        font: { size: n.font_size, color: n.color.fontColor || '#ffffff', strokeWidth: 2, strokeColor: 'rgba(0,0,0,0.3)', face: "'Inter', system-ui, sans-serif", bold: n.is_central ? { color: n.color.fontColor || '#ffffff', size: n.font_size + 2 } : undefined },
-        shape: n.is_central ? 'star' : 'dot', borderWidth: n.is_central ? 3 : 2,
-        shadow: { enabled: true, color: 'rgba(0,0,0,0.15)', size: 8, x: 2, y: 2 },
-        title: `${n.label}\nType: ${n.type}\nImportance: ${n.importance}%`,
-    }));
+    const nodesData = visibleNodes.map(n => {
+        const fontOpts = {
+            size: n.font_size || 14,
+            color: (n.color && n.color.fontColor) || '#ffffff',
+            strokeWidth: 2,
+            strokeColor: 'rgba(0,0,0,0.3)',
+            face: "'Inter', system-ui, sans-serif",
+        };
+        if (n.is_central) {
+            fontOpts.bold = { color: fontOpts.color, size: (n.font_size || 14) + 2 };
+        }
+        return {
+            id: n.id, label: n.label || '', size: n.size || 25,
+            color: {
+                background: (n.color && n.color.background) || '#3B82F6',
+                border:     (n.color && n.color.border)     || '#2563EB',
+                highlight:  { background: (n.color && n.color.background) || '#3B82F6', border: '#1E293B' },
+                hover:      { background: (n.color && n.color.background) || '#3B82F6', border: '#1E293B' },
+            },
+            font: fontOpts,
+            shape: n.is_central ? 'star' : 'dot',
+            borderWidth: n.is_central ? 3 : 2,
+            shadow: { enabled: true, color: 'rgba(0,0,0,0.15)', size: 8, x: 2, y: 2 },
+            title: `${n.label}\nType: ${n.type}\nImportance: ${n.importance}%`,
+        };
+    });
 
     const edgesData = visibleEdges.map((e, i) => ({
         id: i, from: e.from, to: e.to,
-        label: e.label.length > 18 ? e.label.slice(0, 16) + '…' : e.label, width: e.width,
+        label: (e.label || '').length > 18 ? e.label.slice(0, 16) + '…' : (e.label || ''),
+        width: e.width || 1,
         color: { color: '#94A3B8', highlight: '#3B82F6', hover: '#64748B' },
         font: { size: 9, color: '#64748B', strokeWidth: 0, align: 'middle', face: 'system-ui' },
         arrows: { to: { enabled: false } },
@@ -964,48 +1003,64 @@ function initMindMapNetwork() {
         edges: { smooth: { type: 'continuous' } },
     };
 
-    if (mindMapNetworkInstance) { mindMapNetworkInstance.destroy(); mindMapNetworkInstance = null; }
-    const network = new vis.Network(container, { nodes: nodesData, edges: edgesData }, options);
-    mindMapNetworkInstance = network;
+    if (mindMapNetworkInstance) { try { mindMapNetworkInstance.destroy(); } catch(_){} mindMapNetworkInstance = null; }
 
-    network.on('selectNode', (params) => {
-        const nodeId = params.nodes[0];
-        document.querySelectorAll('.mm-concept-item').forEach(el => el.classList.toggle('mm-concept-active', parseInt(el.dataset.nodeId) === nodeId));
-        network.selectEdges(network.getConnectedEdges(nodeId));
-    });
-    network.on('deselectNode', () => {
-        document.querySelectorAll('.mm-concept-item').forEach(el => el.classList.remove('mm-concept-active'));
-    });
+    try {
+        const network = new vis.Network(container, { nodes: new vis.DataSet(nodesData), edges: new vis.DataSet(edgesData) }, options);
+        mindMapNetworkInstance = network;
 
-    document.querySelectorAll('.mm-legend-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const grp = btn.dataset.group;
-            mindMapVisibleGroups.has(grp) ? mindMapVisibleGroups.delete(grp) : mindMapVisibleGroups.add(grp);
-            elements.tabContent.innerHTML = renderInsights();
-            setTimeout(() => initMindMapNetwork(), 60);
+        // Force a redraw + fit after a short delay
+        setTimeout(() => {
+            try { network.redraw(); network.fit({ animation: false }); } catch(_){}
+        }, 400);
+
+        network.on('selectNode', (params) => {
+            const nodeId = params.nodes[0];
+            document.querySelectorAll('.mm-concept-item').forEach(el => el.classList.toggle('mm-concept-active', parseInt(el.dataset.nodeId) === nodeId));
+            network.selectEdges(network.getConnectedEdges(nodeId));
         });
-    });
-
-    document.querySelectorAll('.mm-concept-item').forEach(el => {
-        el.addEventListener('click', () => {
-            const nodeId = parseInt(el.dataset.nodeId);
-            network.selectNodes([nodeId]);
-            network.focus(nodeId, { scale: 1.2, animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
-            document.querySelectorAll('.mm-concept-item').forEach(e => e.classList.remove('mm-concept-active'));
-            el.classList.add('mm-concept-active');
+        network.on('deselectNode', () => {
+            document.querySelectorAll('.mm-concept-item').forEach(el => el.classList.remove('mm-concept-active'));
         });
-    });
 
-    const fitBtn = document.getElementById('mm-btn-fit');
-    const physicsBtn = document.getElementById('mm-btn-physics');
-    if (fitBtn) fitBtn.addEventListener('click', () => network.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } }));
-    let physicsOn = true;
-    if (physicsBtn) physicsBtn.addEventListener('click', () => {
-        physicsOn = !physicsOn;
-        network.setOptions({ physics: { enabled: physicsOn } });
-        physicsBtn.textContent = physicsOn ? '⚛️ Physics' : '📌 Locked';
-    });
-    network.once('stabilizationIterationsDone', () => network.fit({ animation: { duration: 300, easingFunction: 'easeInOutQuad' } }));
+        document.querySelectorAll('.mm-legend-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const grp = btn.dataset.group;
+                mindMapVisibleGroups.has(grp) ? mindMapVisibleGroups.delete(grp) : mindMapVisibleGroups.add(grp);
+                elements.tabContent.innerHTML = renderInsights();
+                requestAnimationFrame(() => setTimeout(() => initMindMapNetwork(), 200));
+            });
+        });
+
+        document.querySelectorAll('.mm-concept-item').forEach(el => {
+            el.addEventListener('click', () => {
+                const nodeId = parseInt(el.dataset.nodeId);
+                network.selectNodes([nodeId]);
+                network.focus(nodeId, { scale: 1.2, animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
+                document.querySelectorAll('.mm-concept-item').forEach(e => e.classList.remove('mm-concept-active'));
+                el.classList.add('mm-concept-active');
+            });
+        });
+
+        const fitBtn = document.getElementById('mm-btn-fit');
+        const physicsBtn = document.getElementById('mm-btn-physics');
+        if (fitBtn) fitBtn.addEventListener('click', () => network.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } }));
+        let physicsOn = true;
+        if (physicsBtn) physicsBtn.addEventListener('click', () => {
+            physicsOn = !physicsOn;
+            network.setOptions({ physics: { enabled: physicsOn } });
+            physicsBtn.textContent = physicsOn ? '⚛️ Physics' : '📌 Locked';
+        });
+        network.once('stabilizationIterationsDone', () => {
+            network.fit({ animation: { duration: 300, easingFunction: 'easeInOutQuad' } });
+            // Secondary safety: force redraw after fit
+            setTimeout(() => { try { network.redraw(); } catch(_){} }, 500);
+        });
+
+        console.info(`[MindMap] rendered ${nodesData.length} nodes, ${edgesData.length} edges in ${cw}x${ch} container`);
+    } catch (err) {
+        console.error('[MindMap] Failed to create vis.Network:', err);
+    }
 }
 
 

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MindElixir Mind Map Demo</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- MindElixir (dist) -->
+  <link rel="stylesheet" href="https://unpkg.com/mind-elixir/dist/style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1>Mind Map Demo — MindElixir</h1>
+    </header>
+
+    <main class="main">
+      <section class="left">
+        <label for="text">Enter text</label>
+        <textarea id="text" placeholder="Paste or type your document here..." rows="12"></textarea>
+        <div class="controls">
+          <input id="title" placeholder="Optional title" />
+          <button id="analyze">Analyze →</button>
+        </div>
+        <div class="tabs">
+          <button class="tab active" data-tab="text">Text View</button>
+          <button class="tab" data-tab="map">Mind Map View</button>
+        </div>
+
+        <div id="text-view" class="panel">
+          <h3>Text</h3>
+          <div id="text-output" class="text-output">(no analysis yet)</div>
+        </div>
+
+      </section>
+
+      <section class="right">
+        <div id="mindmap-wrap" class="panel">
+          <div id="mindmap"></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">FastAPI + KeyBERT + spaCy → MindElixir demo</footer>
+
+    <script src="https://unpkg.com/mind-elixir/dist/index.js"></script>
+    <script src="script.js"></script>
+  </div>
+</body>
+</html>
