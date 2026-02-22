@@ -225,6 +225,12 @@ async function llmGetImprovements(text, focusAreas = null) {
 let aiImprovementsData = null;
 let aiImproveLoading = false;
 
+// Story Continuation state
+let storyAnalysisData = null;
+let storyContinuationData = null;
+let storyOptionsData = null;
+let storyLoading = false;
+
 // ═══════════════════════════════════════════════════════════
 // AI STYLE TRANSFORM UI HANDLER
 // ═══════════════════════════════════════════════════════════
@@ -436,6 +442,7 @@ function renderTab(tab) {
     });
 
     if (tab === 'write')        bindWriteTabEvents();
+    if (tab === 'narrative')     setTimeout(() => bindStoryEvents(), 60);
     if (tab === 'mindmap')      requestAnimationFrame(() => setTimeout(() => initMindElixir(), 200));
     if (tab === 'antipatterns')  setTimeout(() => bindAntiPatternEvents(), 60);
     if (tab === 'improve')       setTimeout(() => bindAIImproveButton(), 60);
@@ -894,6 +901,69 @@ function renderNarrative() {
     }
 
     let html = '<div class="animate-fade-in">';
+    
+    // ── Continue Writing Section (TOP) ──
+    html += `<div class="wc-card mb-md story-continue-section">
+        <div class="wc-card-header">
+            <div class="story-header-title">
+                <h3>✦ Continue Your Story</h3>
+                <span class="story-badge">AI Writer</span>
+            </div>
+        </div>
+        <div class="wc-card-body">
+            <div class="story-intro">
+                <p class="text-muted text-sm">Let AI seamlessly continue your narrative while maintaining style, tone, and voice.</p>
+            </div>
+            
+            <!-- Story Analysis Display -->
+            <div id="story-analysis-display" class="story-analysis-grid ${storyAnalysisData ? '' : 'hidden'}">
+                ${storyAnalysisData ? renderStoryAnalysis(storyAnalysisData) : ''}
+            </div>
+            
+            <!-- Controls -->
+            <div class="story-controls">
+                <div class="story-control-row">
+                    <div class="story-control-group">
+                        <label class="story-label">Word Target</label>
+                        <div class="story-word-selector">
+                            <button class="story-word-btn ${!window.storyWordTarget || window.storyWordTarget === 100 ? 'active' : ''}" data-words="100">100</button>
+                            <button class="story-word-btn ${window.storyWordTarget === 150 ? 'active' : ''}" data-words="150">150</button>
+                            <button class="story-word-btn ${window.storyWordTarget === 200 ? 'active' : ''}" data-words="200">200</button>
+                            <button class="story-word-btn ${window.storyWordTarget === 300 ? 'active' : ''}" data-words="300">300</button>
+                        </div>
+                    </div>
+                    <div class="story-control-group story-control-flex">
+                        <label class="story-label">Direction <span class="text-muted">(optional)</span></label>
+                        <input type="text" id="story-direction-input" class="story-input" placeholder="e.g., Build tension, introduce conflict...">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Action Buttons -->
+            <div class="story-actions">
+                <button id="story-analyze-btn" class="wc-btn wc-btn-ghost wc-btn-sm" ${!llmAvailable ? 'disabled title="LLM not available"' : ''}>
+                    🔍 Analyze Style
+                </button>
+                <button id="story-options-btn" class="wc-btn wc-btn-ghost wc-btn-sm" ${!llmAvailable ? 'disabled title="LLM not available"' : ''}>
+                    🎯 Get Directions
+                </button>
+                <button id="story-continue-btn" class="wc-btn wc-btn-primary" ${!llmAvailable ? 'disabled title="LLM not available"' : ''}>
+                    ${storyLoading ? '<span class="wc-spinner-sm"></span> Writing...' : '✦ Continue Story'}
+                </button>
+            </div>
+            
+            <!-- Direction Options -->
+            <div id="story-options-container" class="story-options-container ${storyOptionsData ? '' : 'hidden'}">
+                ${storyOptionsData ? renderStoryOptions(storyOptionsData) : ''}
+            </div>
+            
+            <!-- Continuation Result -->
+            <div id="story-result-container" class="story-result-container ${storyContinuationData ? '' : 'hidden'}">
+                ${storyContinuationData ? renderStoryContinuation(storyContinuationData) : ''}
+            </div>
+        </div>
+    </div>`;
+    
     const summary = nt.narrative_timeline?.summary || {};
 
     // Summary cards
@@ -1003,6 +1073,241 @@ function renderNarrative() {
 
 function _narCard(emoji, label, value) {
     return `<div class="nar-card"><div class="nar-card-icon">${emoji}</div><div class="nar-card-value">${value}</div><div class="nar-card-label">${label}</div></div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  STORY CONTINUATION HELPERS
+// ═══════════════════════════════════════════════════════════
+
+function renderStoryAnalysis(data) {
+    if (!data || !data.success) return '';
+    return `
+        <div class="story-analysis-item">
+            <span class="story-analysis-label">POV</span>
+            <span class="story-analysis-value">${_esc((data.pov || '—').replace(/_/g, ' '))}</span>
+        </div>
+        <div class="story-analysis-item">
+            <span class="story-analysis-label">Tense</span>
+            <span class="story-analysis-value">${_esc(data.tense || '—')}</span>
+        </div>
+        <div class="story-analysis-item">
+            <span class="story-analysis-label">Tone</span>
+            <span class="story-analysis-value">${_esc(data.tone || '—')}</span>
+        </div>
+        <div class="story-analysis-item">
+            <span class="story-analysis-label">Genre</span>
+            <span class="story-analysis-value">${_esc(data.genre_hint || '—')}</span>
+        </div>
+        ${data.characters?.length > 0 ? `
+        <div class="story-analysis-item story-analysis-wide">
+            <span class="story-analysis-label">Characters</span>
+            <span class="story-analysis-value">${data.characters.map(c => _esc(c.name)).join(', ')}</span>
+        </div>` : ''}
+    `;
+}
+
+function renderStoryOptions(data) {
+    if (!data || !data.success || !data.options?.length) return '';
+    let html = '<div class="story-options-title">Choose a Direction</div><div class="story-options-list">';
+    for (let i = 0; i < data.options.length; i++) {
+        const opt = data.options[i];
+        html += `
+            <div class="story-option-card" data-option-index="${i}">
+                <div class="story-option-header">
+                    <span class="story-option-type">${_esc(opt.direction || 'Continue')}</span>
+                    <span class="story-option-confidence">${Math.round((opt.confidence || 0.8) * 100)}%</span>
+                </div>
+                <div class="story-option-text">${_esc(opt.text || opt.preview || '')}</div>
+            </div>
+        `;
+    }
+    html += '</div>';
+    return html;
+}
+
+function renderStoryContinuation(data) {
+    if (!data || !data.success) return '';
+    return `
+        <div class="story-result-header">
+            <span class="story-result-title">✦ Continuation</span>
+            <div class="story-result-meta">
+                <span>POV: ${_esc(data.pov || '—')}</span>
+                <span>·</span>
+                <span>Tense: ${_esc(data.tense || '—')}</span>
+                <span>·</span>
+                <span>${Math.round(data.generation_time_ms || 0)}ms</span>
+            </div>
+        </div>
+        <div class="story-result-text">${_esc(data.continuation || '')}</div>
+        <div class="story-result-actions">
+            <button class="wc-btn wc-btn-ghost wc-btn-sm" onclick="copyStoryContinuation()">📋 Copy</button>
+            <button class="wc-btn wc-btn-primary wc-btn-sm" onclick="appendStoryContinuation()">➕ Append to Text</button>
+        </div>
+    `;
+}
+
+// Story action handlers
+async function analyzeStoryStyle() {
+    const text = elements.textInput?.value?.trim();
+    if (!text) { showToast('Please enter text to analyze', 'warning'); return; }
+    
+    const btn = document.getElementById('story-analyze-btn');
+    if (btn) btn.innerHTML = '<span class="wc-spinner-sm"></span> Analyzing...';
+    
+    try {
+        const result = await llmAnalyzeStory(text);
+        if (result && result.success) {
+            storyAnalysisData = result;
+            const container = document.getElementById('story-analysis-display');
+            if (container) {
+                container.innerHTML = renderStoryAnalysis(result);
+                container.classList.remove('hidden');
+            }
+            showToast('Story style analyzed!', 'success');
+        } else {
+            showToast(result?.error || 'Analysis failed', 'error');
+        }
+    } catch (e) {
+        showToast('Analysis failed: ' + e.message, 'error');
+    } finally {
+        if (btn) btn.innerHTML = '🔍 Analyze Style';
+    }
+}
+
+async function getStoryOptions() {
+    const text = elements.textInput?.value?.trim();
+    if (!text) { showToast('Please enter text first', 'warning'); return; }
+    
+    const btn = document.getElementById('story-options-btn');
+    if (btn) btn.innerHTML = '<span class="wc-spinner-sm"></span> Getting...';
+    
+    try {
+        const r = await fetch(`${CONFIG.API_BASE_URL}/story/options`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, num_options: 3 })
+        });
+        const result = await r.json();
+        
+        if (result && result.success) {
+            storyOptionsData = result;
+            const container = document.getElementById('story-options-container');
+            if (container) {
+                container.innerHTML = renderStoryOptions(result);
+                container.classList.remove('hidden');
+                // Hide continuation result when showing options
+                document.getElementById('story-result-container')?.classList.add('hidden');
+            }
+        } else {
+            showToast(result?.error || 'Failed to get options', 'error');
+        }
+    } catch (e) {
+        showToast('Failed to get options: ' + e.message, 'error');
+    } finally {
+        if (btn) btn.innerHTML = '🎯 Get Directions';
+    }
+}
+
+async function continueStoryFromUI() {
+    const text = elements.textInput?.value?.trim();
+    if (!text) { showToast('Please enter text to continue', 'warning'); return; }
+    
+    const wordTarget = window.storyWordTarget || 100;
+    const direction = document.getElementById('story-direction-input')?.value?.trim() || '';
+    
+    const btn = document.getElementById('story-continue-btn');
+    if (btn) { btn.innerHTML = '<span class="wc-spinner-sm"></span> Writing...'; btn.disabled = true; }
+    storyLoading = true;
+    
+    try {
+        const result = await llmContinueStory(text, wordTarget, direction, false);
+        
+        if (result && result.success) {
+            storyContinuationData = result;
+            const container = document.getElementById('story-result-container');
+            if (container) {
+                container.innerHTML = renderStoryContinuation(result);
+                container.classList.remove('hidden');
+                // Hide options when showing result
+                document.getElementById('story-options-container')?.classList.add('hidden');
+            }
+            showToast('Story continued!', 'success');
+        } else {
+            showToast(result?.error || 'Continuation failed', 'error');
+        }
+    } catch (e) {
+        showToast('Continuation failed: ' + e.message, 'error');
+    } finally {
+        storyLoading = false;
+        if (btn) { btn.innerHTML = '✦ Continue Story'; btn.disabled = !llmAvailable; }
+    }
+}
+
+function useStoryOption(index) {
+    if (!storyOptionsData?.options?.[index]) return;
+    const option = storyOptionsData.options[index];
+    
+    // Use the option text as the continuation
+    storyContinuationData = {
+        success: true,
+        continuation: option.text || option.preview || '',
+        pov: storyAnalysisData?.pov || '—',
+        tense: storyAnalysisData?.tense || '—',
+        generation_time_ms: 0
+    };
+    
+    const container = document.getElementById('story-result-container');
+    if (container) {
+        container.innerHTML = renderStoryContinuation(storyContinuationData);
+        container.classList.remove('hidden');
+    }
+    document.getElementById('story-options-container')?.classList.add('hidden');
+}
+
+function copyStoryContinuation() {
+    if (storyContinuationData?.continuation) {
+        navigator.clipboard.writeText(storyContinuationData.continuation)
+            .then(() => showToast('Continuation copied!', 'success'))
+            .catch(() => showToast('Copy failed', 'error'));
+    }
+}
+
+function appendStoryContinuation() {
+    if (storyContinuationData?.continuation && elements.textInput) {
+        elements.textInput.value += '\n\n' + storyContinuationData.continuation;
+        updateCounts();
+        showToast('Continuation appended! Re-analyze to see updated narrative.', 'success');
+        // Clear the result
+        storyContinuationData = null;
+        document.getElementById('story-result-container')?.classList.add('hidden');
+    }
+}
+
+function bindStoryEvents() {
+    // Word target buttons
+    document.querySelectorAll('.story-word-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            document.querySelectorAll('.story-word-btn').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            window.storyWordTarget = parseInt(e.target.dataset.words);
+        });
+    });
+    
+    // Action buttons
+    document.getElementById('story-analyze-btn')?.addEventListener('click', analyzeStoryStyle);
+    document.getElementById('story-options-btn')?.addEventListener('click', getStoryOptions);
+    document.getElementById('story-continue-btn')?.addEventListener('click', continueStoryFromUI);
+    
+    // Option cards
+    document.querySelectorAll('.story-option-card').forEach(card => {
+        card.addEventListener('click', () => {
+            const index = parseInt(card.dataset.optionIndex);
+            useStoryOption(index);
+        });
+    });
+    
+    // Initialize word target
+    if (!window.storyWordTarget) window.storyWordTarget = 100;
 }
 
 
