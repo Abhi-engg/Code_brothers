@@ -402,6 +402,10 @@ function renderTab(tab) {
     }
     elements.tabContent.innerHTML = html;
     elements.tabContent.style.opacity = '0';
+    
+    // Toggle mindmap-active class for overflow handling
+    elements.tabContent.classList.toggle('mindmap-active', tab === 'mindmap');
+    
     requestAnimationFrame(() => {
         elements.tabContent.style.transition = 'opacity 0.3s ease';
         elements.tabContent.style.opacity = '1';
@@ -1283,29 +1287,45 @@ function initMindMapNetwork(retryCount) {
 
 
 // ═══════════════════════════════════════════════════════════
-//  TAB 5b — MIND MAP (MindElixir + KeyBERT)
+//  TAB 5b — MIND MAP (MindElixir + KeyBERT + AI Flowchart)
 // ═══════════════════════════════════════════════════════════
 
 let mindElixirInstance = null;
 let mindElixirData = null;
 let mindMapViewMode = 'map'; // 'text' or 'map'
+let mindMapMode = 'keybert'; // 'keybert' or 'ai'
+let aiFlowchartData = null;
+let aiFlowchartNetwork = null;
 
 function renderMindMap() {
     let html = '<div class="animate-fade-in">';
     
-    // Header with view switcher
+    // Header with mode switcher and view switcher
     html += `
     <div class="me-header">
         <h3 style="font-size:1.05rem;font-weight:600;display:flex;align-items:center;gap:8px">
-            🧠 KeyBERT Mind Map
+            🧠 Concept Mind Map
         </h3>
-        <div class="me-tabs">
-            <button class="me-tab ${mindMapViewMode === 'text' ? 'active' : ''}" data-view="text">📝 Text View</button>
-            <button class="me-tab ${mindMapViewMode === 'map' ? 'active' : ''}" data-view="map">🗺️ Mind Map</button>
+        <div class="me-controls">
+            <div class="me-mode-toggle">
+                <button class="me-mode-btn ${mindMapMode === 'keybert' ? 'active' : ''}" data-mode="keybert" title="Keyword-based extraction">
+                    🔑 KeyBERT
+                </button>
+                <button class="me-mode-btn ${mindMapMode === 'ai' ? 'active' : ''}" data-mode="ai" title="AI-powered semantic analysis">
+                    🤖 AI Flowchart
+                </button>
+            </div>
+            <div class="me-tabs">
+                <button class="me-tab ${mindMapViewMode === 'text' ? 'active' : ''}" data-view="text">📝 Text</button>
+                <button class="me-tab ${mindMapViewMode === 'map' ? 'active' : ''}" data-view="map">🗺️ Map</button>
+            </div>
         </div>
     </div>`;
 
     // Text view panel
+    const showKeyBERTText = mindMapMode === 'keybert';
+    const showAIText = mindMapMode === 'ai';
+    
     html += `
     <div id="me-text-view" class="me-panel" style="display:${mindMapViewMode === 'text' ? 'block' : 'none'}">
         <div class="wc-card">
@@ -1314,7 +1334,7 @@ function renderMindMap() {
                 <div class="me-text-output">${_esc(analysisResults.input?.text || '(no text)')}</div>
             </div>
         </div>
-        ${mindElixirData ? `
+        ${showKeyBERTText && mindElixirData ? `
         <div class="wc-card mt-md">
             <div class="wc-card-header"><h3>🏷️ Extracted Keywords</h3><span class="wc-badge wc-badge-primary">${(mindElixirData.meta?.keywords || []).length}</span></div>
             <div class="wc-card-body" style="display:flex;flex-wrap:wrap;gap:8px">
@@ -1327,18 +1347,44 @@ function renderMindMap() {
                 ${(mindElixirData.entities || []).map(ent => `<span class="entity-tag entity-ENTITY">${_esc(ent)}</span>`).join('')}
             </div>
         </div>` : ''}
+        ${showAIText && aiFlowchartData?.meta ? `
+        <div class="wc-card mt-md">
+            <div class="wc-card-header"><h3>🎯 AI-Extracted Categories</h3><span class="wc-badge wc-badge-primary">${(aiFlowchartData.meta?.categories || []).length}</span></div>
+            <div class="wc-card-body" style="display:flex;flex-wrap:wrap;gap:8px">
+                ${(aiFlowchartData.meta?.categories || []).map(cat => `<span class="entity-tag entity-CATEGORY">${_esc(cat)}</span>`).join('')}
+            </div>
+        </div>
+        <div class="wc-card mt-md">
+            <div class="wc-card-header"><h3>💡 Total Concepts</h3><span class="wc-badge wc-badge-success">${aiFlowchartData.meta?.total_concepts || 0}</span></div>
+            <div class="wc-card-body">
+                <p class="text-sm text-muted">Generation time: ${(aiFlowchartData.meta?.generation_time_ms || 0).toFixed(0)}ms</p>
+            </div>
+        </div>` : ''}
     </div>`;
 
     // Mind Map view panel
     html += `
     <div id="me-map-view" class="me-panel" style="display:${mindMapViewMode === 'map' ? 'flex' : 'none'}">
-        <div id="me-container" class="me-container">
-            <div class="me-loading">
-                <div class="wc-spinner"></div>
-                <p>Building mind map...</p>
+        <div class="me-toolbar">
+            <div class="me-toolbar-left">
+                <span class="me-toolbar-label">${mindMapMode === 'ai' ? '🤖 AI Semantic Flowchart' : '🔑 KeyBERT Mind Map'}</span>
+            </div>
+            <div class="me-toolbar-right">
+                <button class="me-zoom-btn" id="me-zoom-in" title="Zoom In">➕</button>
+                <button class="me-zoom-btn" id="me-zoom-out" title="Zoom Out">➖</button>
+                <button class="me-zoom-btn" id="me-zoom-fit" title="Fit to View">🎯</button>
+                <button class="me-zoom-btn" id="me-zoom-reset" title="Reset View">↺</button>
             </div>
         </div>
-        <div class="me-hint">Drag to pan · Scroll to zoom · Click node to focus</div>
+        <div id="me-container" class="me-container me-container-large">
+            <div class="me-loading">
+                <div class="wc-spinner"></div>
+                <p>Building ${mindMapMode === 'ai' ? 'AI flowchart' : 'mind map'}...</p>
+            </div>
+        </div>
+        <div class="me-hint">
+            ${mindMapMode === 'ai' ? '🎯 AI-powered semantic flowchart · ' : ''}Drag to pan · Scroll to zoom · Click node to focus · Double-click to fit
+        </div>
     </div>`;
 
     html += '</div>';
@@ -1346,6 +1392,21 @@ function renderMindMap() {
 }
 
 function initMindElixir() {
+    // Bind mode toggle events
+    document.querySelectorAll('.me-mode-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const newMode = btn.dataset.mode;
+            if (newMode === mindMapMode) return;
+            
+            mindMapMode = newMode;
+            document.querySelectorAll('.me-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mindMapMode));
+            
+            // Re-render and fetch appropriate data
+            elements.tabContent.innerHTML = renderMindMap();
+            requestAnimationFrame(() => setTimeout(() => initMindElixir(), 100));
+        });
+    });
+    
     // Bind view tab events
     document.querySelectorAll('.me-tab').forEach(tab => {
         tab.addEventListener('click', () => {
@@ -1353,17 +1414,361 @@ function initMindElixir() {
             document.querySelectorAll('.me-tab').forEach(t => t.classList.toggle('active', t.dataset.view === mindMapViewMode));
             document.getElementById('me-text-view').style.display = mindMapViewMode === 'text' ? 'block' : 'none';
             document.getElementById('me-map-view').style.display = mindMapViewMode === 'map' ? 'flex' : 'none';
-            if (mindMapViewMode === 'map' && !mindElixirInstance) {
-                buildMindElixirMap();
+            if (mindMapViewMode === 'map') {
+                if (mindMapMode === 'ai') {
+                    if (!aiFlowchartData) {
+                        fetchAIFlowchartData();
+                    } else {
+                        buildAnimatedFlowchart();
+                    }
+                } else if (!mindElixirInstance) {
+                    buildMindElixirMap();
+                }
             }
         });
     });
 
-    // Automatically fetch mind map data if not already fetched
-    if (!mindElixirData) {
-        fetchMindMapData();
-    } else if (mindMapViewMode === 'map') {
-        buildMindElixirMap();
+    // Fetch data based on mode
+    if (mindMapMode === 'ai') {
+        if (!aiFlowchartData) {
+            fetchAIFlowchartData();
+        } else if (mindMapViewMode === 'map') {
+            buildAnimatedFlowchart();
+        }
+    } else {
+        if (!mindElixirData) {
+            fetchMindMapData();
+        } else if (mindMapViewMode === 'map') {
+            buildMindElixirMap();
+        }
+    }
+}
+
+async function fetchAIFlowchartData() {
+    const text = analysisResults.input?.text;
+    if (!text) return;
+    
+    const container = document.getElementById('me-container');
+    if (container) {
+        container.innerHTML = `<div class="me-loading ai-loading">
+            <div class="wc-spinner ai-pulse"></div>
+            <p>🤖 AI analyzing concepts...</p>
+        </div>`;
+    }
+    
+    try {
+        const res = await fetch(`${CONFIG.API_BASE_URL}/mindmap/ai`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, max_concepts: 8 })
+        });
+        if (!res.ok) throw new Error('Server error');
+        aiFlowchartData = await res.json();
+        
+        // Re-render to update text view data
+        elements.tabContent.innerHTML = renderMindMap();
+        requestAnimationFrame(() => setTimeout(() => initMindElixir(), 100));
+    } catch (err) {
+        console.error('[AIFlowchart] Failed to fetch:', err);
+        if (container) {
+            container.innerHTML = `<div class="me-error">❌ AI analysis failed: ${_esc(err.message)}</div>`;
+        }
+    }
+}
+
+function buildAnimatedFlowchart() {
+    if (!aiFlowchartData || !aiFlowchartData.nodes) return;
+    
+    const container = document.getElementById('me-container');
+    if (!container) return;
+    
+    // Guard: vis.js must be loaded
+    if (typeof vis === 'undefined' || typeof vis.Network !== 'function') {
+        console.error('[AIFlowchart] vis-network library not loaded');
+        container.innerHTML = '<div class="me-error">❌ Visualization library not loaded</div>';
+        return;
+    }
+    
+    // Clear loading
+    container.innerHTML = '';
+    
+    // Use viewport-based height for proper sizing
+    const viewportHeight = window.innerHeight;
+    const containerHeight = Math.max(viewportHeight * 0.6, 500);
+    
+    // Set dimensions - use 100% width and calculated height
+    container.style.width = '100%';
+    container.style.height = containerHeight + 'px';
+    container.style.minHeight = '500px';
+    
+    // Destroy previous instance
+    if (aiFlowchartNetwork) {
+        try { aiFlowchartNetwork.destroy(); } catch (e) {}
+        aiFlowchartNetwork = null;
+    }
+    
+    // Build nodes with styling - LARGER for better visibility
+    const nodesData = aiFlowchartData.nodes.map(n => ({
+        id: n.id,
+        label: n.label,
+        level: n.level,
+        size: n.type === 'root' ? 45 : (n.type === 'category' ? 35 : 28),
+        color: {
+            background: n.color?.background || '#3B82F6',
+            border: n.color?.border || '#2563EB',
+            highlight: { background: n.color?.background || '#3B82F6', border: '#1E40AF' },
+            hover: { background: n.color?.background || '#3B82F6', border: '#1E40AF' }
+        },
+        font: {
+            size: n.type === 'root' ? 16 : (n.type === 'category' ? 14 : 12),
+            color: '#FFFFFF',
+            face: "'Inter', system-ui, sans-serif",
+            strokeWidth: 3,
+            strokeColor: 'rgba(0,0,0,0.5)'
+        },
+        shape: n.type === 'root' ? 'star' : (n.type === 'category' ? 'box' : 'ellipse'),
+        borderWidth: n.type === 'root' ? 4 : 3,
+        shadow: {
+            enabled: true,
+            color: 'rgba(0,0,0,0.25)',
+            size: n.type === 'root' ? 15 : 10,
+            x: 3,
+            y: 3
+        }
+    }));
+    
+    // Build edges with curved animation style - THICKER for visibility
+    const edgesData = aiFlowchartData.edges.map((e, i) => ({
+        id: i,
+        from: e.from,
+        to: e.to,
+        width: e.from === 0 ? 4 : 3,  // Thicker from root
+        color: {
+            color: '#64748B',
+            highlight: '#8B5CF6',
+            hover: '#A78BFA'
+        },
+        smooth: {
+            type: 'cubicBezier',
+            forceDirection: 'horizontal',
+            roundness: 0.5
+        },
+        arrows: {
+            to: {
+                enabled: true,
+                scaleFactor: 0.8,
+                type: 'arrow'
+            }
+        },
+        dashes: e.dashes || false
+    }));
+    
+    // Network options for horizontal flowchart layout - MORE SPACING
+    const options = {
+        autoResize: true,
+        height: '100%',
+        width: '100%',
+        layout: {
+            hierarchical: {
+                enabled: true,
+                direction: 'LR',  // Left to Right
+                sortMethod: 'directed',
+                levelSeparation: 200,
+                nodeSpacing: 80,
+                treeSpacing: 100,
+                blockShifting: true,
+                edgeMinimization: true,
+                parentCentralization: true
+            }
+        },
+        physics: {
+            enabled: true,
+            hierarchicalRepulsion: {
+                centralGravity: 0.0,
+                springLength: 180,
+                springConstant: 0.01,
+                nodeDistance: 120,
+                damping: 0.09
+            },
+            stabilization: {
+                enabled: true,
+                iterations: 150,
+                updateInterval: 25,
+                onlyDynamicEdges: false,
+                fit: true
+            }
+        },
+        interaction: {
+            hover: true,
+            tooltipDelay: 150,
+            zoomView: true,
+            zoomSpeed: 0.2,
+            dragView: true,
+            dragNodes: true,
+            navigationButtons: false,
+            keyboard: { enabled: true, speed: { x: 10, y: 10, zoom: 0.02 } }
+        },
+        nodes: {
+            scaling: { min: 20, max: 60 }
+        },
+        edges: {
+            smooth: { type: 'cubicBezier' }
+        }
+    };
+    
+    try {
+        const network = new vis.Network(
+            container,
+            {
+                nodes: new vis.DataSet(nodesData),
+                edges: new vis.DataSet(edgesData)
+            },
+            options
+        );
+        aiFlowchartNetwork = network;
+        
+        // Immediate fit attempt
+        setTimeout(() => {
+            try {
+                network.fit({ animation: false });
+            } catch(e) {}
+        }, 50);
+        
+        // Fit after stabilization with proper zoom
+        network.once('stabilizationIterationsDone', () => {
+            network.setOptions({ physics: { enabled: false } });
+            
+            // Wait for layout to settle then fit
+            setTimeout(() => {
+                // Get container bounds
+                const container = document.getElementById('me-container');
+                if (container) {
+                    network.setSize(container.offsetWidth + 'px', container.offsetHeight + 'px');
+                }
+                
+                // Fit to view with padding
+                network.fit({
+                    animation: {
+                        duration: 600,
+                        easingFunction: 'easeInOutQuad'
+                    }
+                });
+                
+                // Then ensure proper zoom level
+                setTimeout(() => {
+                    const scale = network.getScale();
+                    // Ensure minimum readable scale
+                    if (scale < 0.6) {
+                        network.moveTo({
+                            scale: 0.8,
+                            animation: { duration: 400, easingFunction: 'easeInOutQuad' }
+                        });
+                    } else if (scale > 2) {
+                        network.moveTo({
+                            scale: 1.2,
+                            animation: { duration: 400, easingFunction: 'easeInOutQuad' }
+                        });
+                    }
+                    network.redraw();
+                }, 700);
+            }, 150);
+        });
+        
+        // Click to focus
+        network.on('selectNode', (params) => {
+            const nodeId = params.nodes[0];
+            network.focus(nodeId, {
+                scale: 1.3,
+                animation: {
+                    duration: 400,
+                    easingFunction: 'easeInOutQuad'
+                }
+            });
+        });
+        
+        // Double-click to fit all
+        network.on('doubleClick', () => {
+            network.fit({
+                animation: {
+                    duration: 500,
+                    easingFunction: 'easeInOutQuad'
+                }
+            });
+        });
+        
+        // Bind zoom control buttons
+        bindZoomControls(network);
+        
+        // Trigger window resize to ensure proper layout
+        window.dispatchEvent(new Event('resize'));
+        
+        // Force redraw and fit after short delay to ensure visibility
+        setTimeout(() => {
+            try {
+                // Resize the network to container
+                const container = document.getElementById('me-container');
+                if (container) {
+                    network.setSize(container.offsetWidth + 'px', container.offsetHeight + 'px');
+                }
+                network.redraw();
+                // Fit with some padding
+                network.fit({
+                    animation: { duration: 400, easingFunction: 'easeInOutQuad' }
+                });
+            } catch(e) {
+                console.warn('[AIFlowchart] Redraw error:', e);
+            }
+        }, 300);
+        
+        console.info(`[AIFlowchart] rendered ${nodesData.length} nodes, ${edgesData.length} edges`);
+    } catch (err) {
+        console.error('[AIFlowchart] Failed to create network:', err);
+        container.innerHTML = `<div class="me-error">❌ Failed to render flowchart: ${_esc(err.message)}</div>`;
+    }
+}
+
+function bindZoomControls(network) {
+    const zoomInBtn = document.getElementById('me-zoom-in');
+    const zoomOutBtn = document.getElementById('me-zoom-out');
+    const zoomFitBtn = document.getElementById('me-zoom-fit');
+    const zoomResetBtn = document.getElementById('me-zoom-reset');
+    
+    if (zoomInBtn) {
+        zoomInBtn.addEventListener('click', () => {
+            const scale = network.getScale();
+            network.moveTo({
+                scale: scale * 1.3,
+                animation: { duration: 300, easingFunction: 'easeInOutQuad' }
+            });
+        });
+    }
+    
+    if (zoomOutBtn) {
+        zoomOutBtn.addEventListener('click', () => {
+            const scale = network.getScale();
+            network.moveTo({
+                scale: scale * 0.7,
+                animation: { duration: 300, easingFunction: 'easeInOutQuad' }
+            });
+        });
+    }
+    
+    if (zoomFitBtn) {
+        zoomFitBtn.addEventListener('click', () => {
+            network.fit({
+                animation: { duration: 500, easingFunction: 'easeInOutQuad' }
+            });
+        });
+    }
+    
+    if (zoomResetBtn) {
+        zoomResetBtn.addEventListener('click', () => {
+            network.moveTo({
+                scale: 1.0,
+                position: { x: 0, y: 0 },
+                animation: { duration: 500, easingFunction: 'easeInOutQuad' }
+            });
+        });
     }
 }
 

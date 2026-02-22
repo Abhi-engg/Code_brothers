@@ -492,6 +492,207 @@ async def create_mindmap(req: MindMapRequest):
     }
 
 
+class AIMindMapRequest(BaseModel):
+    """Request model for AI-powered mind map generation"""
+    text: str
+    title: Optional[str] = None
+    max_concepts: int = 8
+
+
+@app.post("/mindmap/ai", tags=["Mind Map"])
+async def create_ai_mindmap(req: AIMindMapRequest):
+    """
+    Generate a semantic mind map using LLM for concept extraction.
+    
+    Returns hierarchical data optimized for animated flowchart visualization:
+    - nodes: List of nodes with id, label, type, color
+    - edges: List of edges connecting nodes
+    - root: Root node information
+    
+    This uses the LLM to understand relationships between concepts,
+    providing deeper semantic understanding than keyword extraction.
+    """
+    from nlp_engine.llm_client import get_client as get_llm_client
+    import time
+    
+    text = req.text or ''
+    title = req.title or (text.strip().split('\n')[0][:60] if text else 'Document')
+    start_time = time.time()
+    
+    # Prompt LLM for concept extraction
+    prompt = f"""Analyze this text and extract concepts for a mind map.
+
+TEXT:
+{text[:2000]}
+
+Respond with EXACTLY this format (no extra text):
+THEME: [main theme, 3-5 words]
+CATEGORY1: [category name]
+- [concept 1]
+- [concept 2]
+- [concept 3]
+CATEGORY2: [category name]
+- [concept 1]
+- [concept 2]
+CATEGORY3: [category name]
+- [concept 1]
+- [concept 2]
+
+Example:
+THEME: Fantasy Adventure Quest
+CATEGORY1: Characters
+- Old Wizard
+- Village People
+- Ancient Dragon
+CATEGORY2: Locations
+- Misty Mountains
+- Dragon Lair
+- Village
+CATEGORY3: Plot Elements
+- Treasure Hunt
+- Fear of Beast"""
+
+    try:
+        llm_client = get_llm_client()
+        result = llm_client.generate(prompt, max_tokens=500)
+        
+        if not result.success:
+            raise Exception(result.error or "LLM generation failed")
+        
+        # Parse the response text
+        lines = result.text.strip().split('\n')
+        main_theme = title
+        concept_map = {}
+        current_category = None
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            # Parse theme
+            if line.upper().startswith('THEME:'):
+                main_theme = line.split(':', 1)[1].strip()[:60]
+            # Parse category headers
+            elif line.upper().startswith('CATEGORY') and ':' in line:
+                cat_name = line.split(':', 1)[1].strip()
+                if cat_name:
+                    current_category = cat_name
+                    concept_map[current_category] = []
+            # Parse concepts (lines starting with -)
+            elif line.startswith('-') and current_category:
+                concept = line[1:].strip()
+                if concept and len(concept_map[current_category]) < 4:
+                    concept_map[current_category].append(concept)
+        
+        # Build vis-network compatible nodes and edges
+        nodes = []
+        edges = []
+        node_id = 0
+        
+        # Root node (main theme)
+        root_id = node_id
+        nodes.append({
+            "id": node_id,
+            "label": main_theme,
+            "type": "root",
+            "level": 0,
+            "color": {"background": "#8B5CF6", "border": "#7C3AED"},
+            "size": 35,
+            "font_size": 16
+        })
+        node_id += 1
+        
+        # Category nodes
+        category_colors = [
+            {"background": "#EC4899", "border": "#DB2777"},
+            {"background": "#F59E0B", "border": "#D97706"},
+            {"background": "#10B981", "border": "#059669"},
+            {"background": "#3B82F6", "border": "#2563EB"},
+            {"background": "#6366F1", "border": "#4F46E5"},
+        ]
+        
+        category_ids = {}
+        for idx, cat in enumerate(concept_map.keys()):
+            cat_id = node_id
+            category_ids[cat] = cat_id
+            color = category_colors[idx % len(category_colors)]
+            nodes.append({
+                "id": cat_id,
+                "label": cat,
+                "type": "category",
+                "level": 1,
+                "color": color,
+                "size": 28,
+                "font_size": 13
+            })
+            edges.append({
+                "from": root_id,
+                "to": cat_id,
+                "label": "",
+                "width": 3,
+                "dashes": False
+            })
+            node_id += 1
+        
+        # Concept nodes
+        concept_color = {"background": "#22C55E", "border": "#16A34A"}
+        for cat, concepts in concept_map.items():
+            cat_id = category_ids.get(cat)
+            if cat_id is None:
+                continue
+            for concept in concepts:
+                nodes.append({
+                    "id": node_id,
+                    "label": concept,
+                    "type": "concept",
+                    "level": 2,
+                    "color": concept_color,
+                    "size": 20,
+                    "font_size": 11
+                })
+                edges.append({
+                    "from": cat_id,
+                    "to": node_id,
+                    "label": "",
+                    "width": 2,
+                    "dashes": False
+                })
+                node_id += 1
+        
+        elapsed_ms = (time.time() - start_time) * 1000
+        
+        return {
+            "success": True,
+            "nodes": nodes,
+            "edges": edges,
+            "root": {"id": root_id, "label": main_theme},
+            "meta": {
+                "categories": list(concept_map.keys()),
+                "total_concepts": sum(len(c) for c in concept_map.values()),
+                "generation_time_ms": elapsed_ms,
+                "mode": "ai"
+            }
+        }
+        
+    except Exception as e:
+        # Fallback to simple extraction
+        elapsed_ms = (time.time() - start_time) * 1000
+        return {
+            "success": False,
+            "nodes": [{"id": 0, "label": title, "type": "root", "level": 0, "color": {"background": "#8B5CF6", "border": "#7C3AED"}, "size": 35, "font_size": 16}],
+            "edges": [],
+            "root": {"id": 0, "label": title},
+            "meta": {
+                "categories": [],
+                "total_concepts": 0,
+                "generation_time_ms": elapsed_ms,
+                "mode": "ai",
+                "error": str(e)
+            }
+        }
+
+
 # ==================== LLM Enhancement Endpoints ====================
 
 @app.post("/enhance/rewrite", response_model=RewriteResponse, tags=["LLM Enhancement"])
