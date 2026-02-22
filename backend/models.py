@@ -528,3 +528,42 @@ class StoryContinueOptionsResponse(BaseModel):
     context: ContextInfo = Field(default=None, description="Context used")
     generation_time_ms: float = Field(default=0.0, description="Total generation time")
     error: Optional[str] = Field(default=None, description="Error message if failed")
+
+
+# ==================== AI Improvement Models ====================
+
+class AIImprovementSuggestion(BaseModel):
+    """Single AI improvement suggestion"""
+    category: str = Field(..., description="Category: clarity, conciseness, engagement, flow, word_choice")
+    issue: str = Field(..., description="The identified issue")
+    original: str = Field(..., description="Original text segment")
+    suggestion: str = Field(..., description="Improved version")
+    explanation: str = Field(..., description="Why this improvement helps")
+    priority: str = Field(default="medium", description="high, medium, or low")
+
+
+class AIImproveRequest(BaseModel):
+    """Request model for AI-powered improvement suggestions"""
+    text: str = Field(..., min_length=10, max_length=50000, description="Text to improve")
+    focus_areas: Optional[List[str]] = Field(
+        default=None,
+        description="Specific areas to focus on: clarity, conciseness, engagement, flow, word_choice"
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "text": "The meeting was held by the team to discuss the project that was very important.",
+                "focus_areas": ["clarity", "conciseness"]
+            }
+        }
+
+
+class AIImproveResponse(BaseModel):
+    """Response model for AI-powered improvement suggestions"""
+    success: bool = Field(..., description="Whether analysis was successful")
+    suggestions: List[AIImprovementSuggestion] = Field(default=[], description="Improvement suggestions")
+    overall_score: int = Field(default=0, description="Overall writing quality score 0-100")
+    summary: str = Field(default="", description="Summary of main improvements needed")
+    generation_time_ms: float = Field(default=0.0, description="Generation time in ms")
+    error: Optional[str] = Field(default=None, description="Error message if failed")

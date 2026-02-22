@@ -1109,6 +1109,154 @@ async def continue_story_options_endpoint(request: StoryContinueOptionsRequest):
         )
 
 
+# ==================== AI Improvement Endpoint ====================
+
+from backend.models import AIImproveRequest, AIImproveResponse, AIImprovementSuggestion
+
+@app.post("/improve/ai", response_model=AIImproveResponse, tags=["LLM Enhancement"])
+async def ai_improve_text(request: AIImproveRequest):
+    """
+    Get AI-powered improvement suggestions for text.
+    
+    Uses the local LLM (Ollama + llama3.2:3b) to analyze text and provide
+    actionable improvement suggestions across multiple categories:
+    - **clarity**: Make meaning clearer
+    - **conciseness**: Remove unnecessary words
+    - **engagement**: Make text more compelling
+    - **flow**: Improve sentence transitions
+    - **word_choice**: Suggest better vocabulary
+    
+    The AI analyzes the text holistically and provides specific,
+    sentence-level suggestions with explanations.
+    """
+    import time
+    start_time = time.time()
+    
+    try:
+        # Check LLM availability
+        llm_client = get_llm_client()
+        if not llm_client:
+            return AIImproveResponse(
+                success=False,
+                suggestions=[],
+                overall_score=0,
+                summary="",
+                generation_time_ms=0,
+                error="LLM not available. Please ensure Ollama is running."
+            )
+        
+        # Build the prompt for improvement analysis
+        focus = request.focus_areas or ["clarity", "conciseness", "engagement", "flow", "word_choice"]
+        focus_str = ", ".join(focus)
+        
+        prompt = f"""Analyze this text and provide specific improvement suggestions.
+
+TEXT:
+\"\"\"
+{request.text}
+\"\"\"
+
+Focus areas: {focus_str}
+
+Provide 3-6 specific, actionable suggestions. For each suggestion use this EXACT format:
+
+SUGGESTION:
+CATEGORY: [one of: clarity, conciseness, engagement, flow, word_choice]
+PRIORITY: [high, medium, or low]
+ISSUE: [describe the specific issue in 1 sentence]
+ORIGINAL: [exact text that needs improvement]
+IMPROVED: [your improved version]
+EXPLANATION: [why this improvement helps, 1-2 sentences]
+
+Also provide:
+OVERALL_SCORE: [0-100 quality score]
+SUMMARY: [2-3 sentence summary of main improvements needed]
+
+Be specific and provide actual text improvements, not general advice."""
+        
+        # Generate with LLM
+        result = llm_client.generate(prompt, max_tokens=2000)
+        response_text = result.text.strip() if hasattr(result, 'text') else str(result).strip()
+        
+        # Parse the response
+        suggestions = []
+        overall_score = 70
+        summary = ""
+        
+        # Parse suggestions
+        suggestion_blocks = response_text.split("SUGGESTION:")[1:] if "SUGGESTION:" in response_text else []
+        
+        for block in suggestion_blocks:
+            try:
+                lines = block.strip().split("\n")
+                data = {}
+                current_key = None
+                
+                for line in lines:
+                    line = line.strip()
+                    if line.startswith("CATEGORY:"):
+                        data["category"] = line.replace("CATEGORY:", "").strip().lower()
+                    elif line.startswith("PRIORITY:"):
+                        data["priority"] = line.replace("PRIORITY:", "").strip().lower()
+                    elif line.startswith("ISSUE:"):
+                        data["issue"] = line.replace("ISSUE:", "").strip()
+                    elif line.startswith("ORIGINAL:"):
+                        data["original"] = line.replace("ORIGINAL:", "").strip()
+                    elif line.startswith("IMPROVED:"):
+                        data["suggestion"] = line.replace("IMPROVED:", "").strip()
+                    elif line.startswith("EXPLANATION:"):
+                        data["explanation"] = line.replace("EXPLANATION:", "").strip()
+                
+                if all(k in data for k in ["category", "issue", "original", "suggestion", "explanation"]):
+                    suggestions.append(AIImprovementSuggestion(
+                        category=data.get("category", "clarity"),
+                        issue=data.get("issue", ""),
+                        original=data.get("original", ""),
+                        suggestion=data.get("suggestion", ""),
+                        explanation=data.get("explanation", ""),
+                        priority=data.get("priority", "medium")
+                    ))
+            except Exception:
+                continue
+        
+        # Parse overall score
+        if "OVERALL_SCORE:" in response_text:
+            try:
+                score_line = response_text.split("OVERALL_SCORE:")[1].split("\n")[0]
+                overall_score = int(''.join(filter(str.isdigit, score_line[:5])))
+                overall_score = max(0, min(100, overall_score))
+            except:
+                pass
+        
+        # Parse summary
+        if "SUMMARY:" in response_text:
+            try:
+                summary = response_text.split("SUMMARY:")[1].split("\n\n")[0].strip()
+            except:
+                pass
+        
+        elapsed_ms = (time.time() - start_time) * 1000
+        
+        return AIImproveResponse(
+            success=len(suggestions) > 0,
+            suggestions=suggestions,
+            overall_score=overall_score,
+            summary=summary or f"Found {len(suggestions)} areas for improvement.",
+            generation_time_ms=elapsed_ms,
+            error=None if suggestions else "No suggestions generated"
+        )
+        
+    except Exception as e:
+        return AIImproveResponse(
+            success=False,
+            suggestions=[],
+            overall_score=0,
+            summary="",
+            generation_time_ms=(time.time() - start_time) * 1000,
+            error=str(e)
+        )
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
     """Global exception handler"""
