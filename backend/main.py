@@ -6,7 +6,7 @@ FastAPI backend server that orchestrates the NLP pipeline
 import sys
 import os
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Optional, List
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from backend.models import (
     AnalysisRequest,
@@ -31,6 +32,7 @@ from nlp_engine import WritingAssistant, analyze_text, NarrativeConsistencyAnaly
 # Global instances (loaded once)
 assistant: Optional[WritingAssistant] = None
 consistency_analyzer: Optional[NarrativeConsistencyAnalyzer] = None
+kw_model = None  # KeyBERT model (lazy loaded)
 
 
 @asynccontextmanager
@@ -334,6 +336,102 @@ async def analyze_consistency_endpoint(request: AnalysisRequest):
             status_code=500,
             detail=f"Consistency analysis failed: {str(e)}"
         )
+
+
+# ── MindElixir Mind Map Endpoint ────────────────────────────────────────────
+
+class MindMapRequest(BaseModel):
+    text: str
+    title: Optional[str] = None
+    top_n: int = 8
+
+
+@app.post("/mindmap", tags=["Mind Map"])
+async def create_mindmap(req: MindMapRequest):
+    """
+    Generate a hierarchical mind map from text using KeyBERT keywords.
+    
+    Returns data in a format suitable for MindElixir visualization:
+    - topic: Root topic (title or first line of text)
+    - children: Keyword nodes, each with related sentence children
+    - entities: Named entities found in text
+    - meta: Keywords and other metadata
+    """
+    global kw_model, assistant
+    
+    if assistant is None:
+        assistant = WritingAssistant()
+    
+    text = req.text or ''
+    title = req.title or (text.strip().split('\n')[0][:80] if text else 'Document')
+    
+    # Get spaCy doc for NER and sentences
+    doc = assistant.nlp(text)
+    sentences = [s.text.strip() for s in doc.sents if s.text.strip()]
+    entities = list({ent.text for ent in doc.ents})
+    
+    # Extract keywords using KeyBERT (with fallback)
+    keywords = []
+    try:
+        # Lazy load KeyBERT
+        if kw_model is None:
+            from keybert import KeyBERT
+            kw_model = KeyBERT()
+        
+        kw_results = kw_model.extract_keywords(
+            text, 
+            keyphrase_ngram_range=(1, 2), 
+            stop_words='english', 
+            top_n=req.top_n
+        )
+        keywords = [k for k, score in kw_results]
+    except Exception as e:
+        # Fallback: simple frequency-based keywords
+        print(f"KeyBERT fallback due to: {e}")
+        words = [w.text.lower() for w in doc if w.is_alpha and not w.is_stop]
+        freq = {}
+        for w in words:
+            freq[w] = freq.get(w, 0) + 1
+        keywords = sorted(freq.keys(), key=lambda k: -freq[k])[:req.top_n]
+    
+    # Build hierarchical JSON: root -> keywords -> related sentences
+    children = []
+    used_sentences = set()
+    
+    for kw in keywords:
+        related = []
+        for s in sentences:
+            if s in used_sentences:
+                continue
+            if kw.lower() in s.lower():
+                related.append({"topic": s})
+                used_sentences.add(s)
+        
+        # If no direct match, try token overlap
+        if not related:
+            for s in sentences:
+                if s in used_sentences:
+                    continue
+                s_tokens = set([t.lemma_.lower() for t in assistant.nlp(s) if t.is_alpha])
+                kw_tokens = set([t.lemma_.lower() for t in assistant.nlp(kw) if t.is_alpha])
+                if kw_tokens and len(s_tokens & kw_tokens) > 0:
+                    related.append({"topic": s})
+                    used_sentences.add(s)
+        
+        if related:
+            children.append({"topic": kw, "children": related})
+    
+    # Remaining sentences under Misc
+    leftovers = [{"topic": s} for s in sentences if s not in used_sentences]
+    if leftovers:
+        children.append({"topic": "Misc", "children": leftovers})
+    
+    return {
+        "topic": title,
+        "children": children,
+        "entities": entities,
+        "meta": {"keywords": keywords}
+    }
 
 
 @app.exception_handler(Exception)
