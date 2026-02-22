@@ -752,3 +752,18 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+
+async function generatePlot() {
+    const text = document.getElementById("inputText").value;
+
+    const response = await fetch("http://localhost:8000/generate-plot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ previous_plots: text })
+    });
+
+    const data = await response.json();
+
+    document.getElementById("plotOutput").innerText =
+        data.generated_plot + "\nTension Score: " + data.tension_score;
+}

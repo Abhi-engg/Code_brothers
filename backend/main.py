@@ -22,11 +22,14 @@ from models import (
     TransformResponse,
     ErrorResponse,
     HealthResponse,
-    TargetStyle
+    TargetStyle,
+    TextRequest,
+    PlotRequest
 )
 
 # Import the NLP engine
 from nlp_engine import WritingAssistant, analyze_text, NarrativeConsistencyAnalyzer
+from nlp_engine.plot_generator import generate_next_plot
 
 # Global instances (loaded once)
 assistant: Optional[WritingAssistant] = None
@@ -309,6 +312,46 @@ async def analyze_consistency_endpoint(request: AnalysisRequest):
         raise HTTPException(
             status_code=500,
             detail=f"Consistency analysis failed: {str(e)}"
+        )
+
+
+@app.post("/analyze-text", tags=["Analysis"])
+def analyze_text_endpoint(request: TextRequest):
+    """
+    Simple text analysis endpoint with style parameter.
+    
+    Args:
+        request: TextRequest containing text and style
+        
+    Returns:
+        Analysis results with style information
+    """
+    try:
+        return analyze_text(request.text, request.style)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Text analysis failed: {str(e)}"
+        )
+
+
+@app.post("/generate-plot", tags=["Plot Generation"])
+def generate_plot(request: PlotRequest):
+    """
+    Generate next plot point based on previous plot points.
+    
+    Args:
+        request: PlotRequest containing list of previous plot points
+        
+    Returns:
+        Generated plot suggestions and narrative stage
+    """
+    try:
+        return generate_next_plot(request.previous_plots)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Plot generation failed: {str(e)}"
         )
 
 

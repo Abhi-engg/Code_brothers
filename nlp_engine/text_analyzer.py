@@ -7,6 +7,11 @@ import spacy
 from collections import Counter
 from typing import Dict, List, Tuple, Any
 
+from nlp_engine.consistency_checker import check_consistency
+from nlp_engine.clarity_analyzer import analyze_clarity
+from nlp_engine.style_transformer import apply_style
+from nlp_engine.explanation import generate_explanation
+
 # Load spaCy model once at module level
 nlp = spacy.load("en_core_web_sm")
 
@@ -14,6 +19,27 @@ nlp = spacy.load("en_core_web_sm")
 def get_nlp():
     """Return the loaded spaCy model for reuse"""
     return nlp
+
+
+def analyze_text(text: str, style: str = "formal") -> Dict[str, Any]:
+    """
+    Analyze text with style consideration.
+    
+    Args:
+        text: Input text to analyze
+        style: Target style (formal, casual, academic)
+        
+    Returns:
+        Dictionary containing analysis results and style information
+    """
+    # Perform basic analysis
+    analysis_result = analyze(text)
+    
+    # Add style information
+    analysis_result["style"] = style
+    analysis_result["success"] = True
+    
+    return analysis_result
 
 
 def analyze(text: str) -> Dict[str, Any]:
@@ -167,3 +193,34 @@ def analyze_sentence_structure(doc) -> List[Dict[str, Any]]:
         })
     
     return structures
+
+
+def analyze_text_full(text, style):
+    """
+    Comprehensive text analysis with consistency, clarity, style transformation,
+    and explanations.
+    
+    Args:
+        text: Input text to analyze
+        style: Target style for transformation
+        
+    Returns:
+        Dictionary containing enhanced text, consistency report, clarity report,
+        and explanation of changes
+    """
+    consistency_report = check_consistency(text)
+    clarity_report = analyze_clarity(text)
+    styled_text, style_changes = apply_style(text, style)
+
+    explanation = generate_explanation(
+        consistency_report,
+        clarity_report,
+        style_changes
+    )
+
+    return {
+        "enhanced_text": styled_text,
+        "consistency": consistency_report,
+        "clarity": clarity_report,
+        "changes": explanation
+    }

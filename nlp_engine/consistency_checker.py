@@ -9,6 +9,22 @@ from collections import defaultdict
 
 import re
 
+import spacy
+nlp = spacy.load("en_core_web_sm")
+
+
+def check_consistency(text):
+    doc = nlp(text)
+
+    issues = {
+        "pronoun_issues": [],
+        "tense_issues": []
+    }
+
+    # Add logic here
+
+    return issues
+
 
 def check_entity_consistency(doc, entities: List[Tuple[str, str]]) -> Dict[str, Any]:
     """

@@ -482,3 +482,22 @@ def format_explanation_report(explanations: Dict[str, Any]) -> str:
     lines.append("=" * 60)
     
     return "\n".join(lines)
+
+
+def generate_explanation(consistency, clarity, style_changes):
+
+    explanations = []
+
+    for issue in consistency.get("pronoun_issues", []):
+        explanations.append({
+            "type": "consistency",
+            "reason": issue
+        })
+
+    for change in style_changes:
+        explanations.append({
+            "type": "style",
+            "reason": change["reason"]
+        })
+
+    return explanations

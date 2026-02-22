@@ -473,3 +473,27 @@ def get_style_recommendation(current_style: str) -> str:
         "neutral": "Text has a neutral style. Can be adapted for various contexts."
     }
     return recommendations.get(current_style, "Unable to determine style.")
+
+
+def apply_style(text, style):
+
+    changes = []
+
+    formal_map = {
+        "can't": "cannot",
+        "a lot": "numerous"
+    }
+
+    new_text = text
+
+    if style == "formal":
+        for k, v in formal_map.items():
+            if k in new_text:
+                new_text = new_text.replace(k, v)
+                changes.append({
+                    "original": k,
+                    "changed": v,
+                    "reason": "Formal tone selected"
+                })
+
+    return new_text, changes

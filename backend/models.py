@@ -178,3 +178,12 @@ class HealthResponse(BaseModel):
     version: str
     nlp_model: str
     features: List[str]
+
+
+class TextRequest(BaseModel):
+    text: str
+    style: str = "neutral"
+
+
+class PlotRequest(BaseModel):
+    previous_plots: str
