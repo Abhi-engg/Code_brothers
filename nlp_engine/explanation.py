@@ -1,6 +1,9 @@
 """
-Explanation Generator Module
-Generate human-readable explanations for all analysis results
+WriteCraft — Explanation Generator Module
+Generate human-readable, writer-friendly explanations for all analysis results.
+Covers: text analysis, readability, flow, style, consistency, issues,
+        grammar, tone, anti-patterns, passive voice, filler words,
+        clichés, vocabulary complexity, and actionable suggestions.
 """
 
 from typing import Dict, List, Any, Optional
@@ -9,10 +12,10 @@ from typing import Dict, List, Any, Optional
 def generate_explanations(analysis_results: Dict[str, Any]) -> Dict[str, Any]:
     """
     Generate comprehensive explanations for all analysis components.
-    
+
     Args:
         analysis_results: Complete analysis results from the pipeline
-        
+
     Returns:
         Dictionary containing explanations for each component
     """
@@ -24,9 +27,16 @@ def generate_explanations(analysis_results: Dict[str, Any]) -> Dict[str, Any]:
         "style": explain_style(analysis_results.get("style_analysis", {})),
         "consistency": explain_consistency(analysis_results.get("consistency", {})),
         "issues": explain_issues(analysis_results.get("issues", {})),
-        "suggestions": generate_actionable_suggestions(analysis_results)
+        "suggestions": generate_actionable_suggestions(analysis_results),
+        "grammar": explain_grammar(analysis_results.get("grammar_analysis", {})),
+        "tone": explain_tone(analysis_results.get("tone_analysis", {})),
+        "antipatterns": explain_antipatterns(analysis_results.get("antipatterns", {})),
+        "passive_voice": explain_passive_voice(analysis_results.get("passive_voice", {})),
+        "filler_words": explain_filler_words(analysis_results.get("filler_words", {})),
+        "cliches": explain_cliches(analysis_results.get("cliches", {})),
+        "vocabulary": explain_vocabulary(analysis_results.get("vocabulary_complexity", {})),
     }
-    
+
     return explanations
 
 
@@ -482,3 +492,209 @@ def format_explanation_report(explanations: Dict[str, Any]) -> str:
     lines.append("=" * 60)
     
     return "\n".join(lines)
+
+
+# ═══════════════════════════════════════════════════════════
+#  Phase 11 — New explanation generators
+# ═══════════════════════════════════════════════════════════
+
+def explain_grammar(grammar: Dict[str, Any]) -> Dict[str, str]:
+    """Generate writer-friendly explanations for grammar analysis."""
+    if not grammar:
+        return {"summary": "Grammar analysis was not performed."}
+
+    explanations: Dict[str, str] = {}
+    summary = grammar.get("summary", {})
+    total = summary.get("total_issues", 0)
+    grade = summary.get("overall_grade", "—")
+
+    explanations["grade"] = (
+        f"Grammar grade: {grade}. "
+        f"{'Excellent — very few issues.' if grade in ('A', 'A+') else ''}"
+        f"{'Good — minor issues to address.' if grade == 'B' else ''}"
+        f"{'Fair — several issues need attention.' if grade == 'C' else ''}"
+        f"{'Needs work — review the flagged items carefully.' if grade in ('D', 'F') else ''}"
+    )
+
+    spell = grammar.get("spell_errors", [])
+    if spell:
+        explanations["spelling"] = (
+            f"{len(spell)} spelling error{'s' if len(spell) != 1 else ''} detected. "
+            "Misspelled words can undermine credibility. Double-check proper nouns and "
+            "technical terms that may be flagged incorrectly."
+        )
+
+    tense = grammar.get("tense_consistency", [])
+    if tense:
+        explanations["tense"] = (
+            f"{len(tense)} tense-consistency issue{'s' if len(tense) != 1 else ''}. "
+            "Shifting between past, present, and future tenses within the same passage "
+            "can confuse readers. Pick one primary tense and stick with it unless a shift is intentional."
+        )
+
+    punct = grammar.get("punctuation_issues", [])
+    if punct:
+        explanations["punctuation"] = (
+            f"{len(punct)} punctuation issue{'s' if len(punct) != 1 else ''}. "
+            "Proper punctuation guides readers through your ideas. "
+            "Common pitfalls include comma splices, missing serial commas, and misplaced semicolons."
+        )
+
+    explanations["total"] = f"Total grammar issues: {total}."
+    return explanations
+
+
+def explain_tone(tone: Dict[str, Any]) -> Dict[str, str]:
+    """Generate explanations for tone analysis."""
+    if not tone or tone.get("error"):
+        return {"summary": "Tone analysis was not performed or encountered an error."}
+
+    explanations: Dict[str, str] = {}
+    dominant = tone.get("dominant_tone", "neutral")
+    label = tone.get("tone_label", dominant)
+    desc = tone.get("tone_description", "")
+
+    explanations["dominant"] = (
+        f"Dominant tone: {label}. {desc} "
+        "Tone shapes how readers feel about your message — make sure it aligns with your intent."
+    )
+
+    scores = tone.get("tone_scores", {})
+    if scores:
+        top = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:3]
+        breakdown = ", ".join(f"{k} ({v*100:.0f}%)" for k, v in top)
+        explanations["scores"] = f"Top tones detected: {breakdown}."
+
+    per_sent = tone.get("per_sentence", [])
+    if per_sent:
+        shifts = sum(
+            1 for i in range(1, len(per_sent))
+            if per_sent[i].get("dominant") != per_sent[i - 1].get("dominant")
+        )
+        explanations["trajectory"] = (
+            f"Tone shifted {shifts} time{'s' if shifts != 1 else ''} across {len(per_sent)} sentences. "
+            f"{'Consistent tone throughout.' if shifts == 0 else ''}"
+            f"{'Some variety — make sure shifts are deliberate.' if 0 < shifts <= 3 else ''}"
+            f"{'Frequent tone changes — readers may find this jarring.' if shifts > 3 else ''}"
+        )
+
+    return explanations
+
+
+def explain_antipatterns(ap: Dict[str, Any]) -> Dict[str, str]:
+    """Generate explanations for anti-pattern detection."""
+    if not ap or ap.get("error"):
+        return {"summary": "Anti-pattern analysis was not performed."}
+
+    explanations: Dict[str, str] = {}
+    summary = ap.get("summary", {})
+    total = summary.get("total", 0)
+
+    explanations["overview"] = (
+        f"{total} anti-pattern{'s' if total != 1 else ''} detected across your text. "
+        "Anti-patterns are common writing habits that weaken prose. "
+        "Fixing them strengthens clarity, immersion, and reader engagement."
+    )
+
+    cats = ap.get("categories", {})
+    for key, data in cats.items():
+        count = data.get("count", 0)
+        if count == 0:
+            continue
+        tip = data.get("educational_tip", "")
+        explanations[key] = f"{key.replace('_', ' ').title()}: {count} instance{'s' if count != 1 else ''}. {tip}"
+
+    return explanations
+
+
+def explain_passive_voice(pv: Dict[str, Any]) -> Dict[str, str]:
+    """Generate explanations for passive voice detection."""
+    if not pv:
+        return {"summary": "Passive voice analysis was not performed."}
+
+    count = pv.get("passive_count", 0)
+    pct = pv.get("passive_percentage", 0)
+
+    summary = (
+        f"{count} passive-voice construction{'s' if count != 1 else ''} found ({pct:.1f}% of sentences). "
+    )
+    if pct > 30:
+        summary += "This is quite high — active voice is usually more direct and engaging. "
+    elif pct > 15:
+        summary += "Moderate usage — consider converting some to active voice for stronger prose. "
+    else:
+        summary += "Good balance — passive voice is used sparingly. "
+
+    summary += (
+        "Passive voice is not always wrong; it works well when the action matters more than the actor, "
+        "or when the actor is unknown."
+    )
+
+    return {"summary": summary}
+
+
+def explain_filler_words(fw: Dict[str, Any]) -> Dict[str, str]:
+    """Generate explanations for filler word detection."""
+    if not fw:
+        return {"summary": "Filler word analysis was not performed."}
+
+    total = fw.get("total_fillers", 0)
+    unique = fw.get("unique_fillers", 0)
+    details = fw.get("filler_details", {})
+
+    if total == 0:
+        return {"summary": "No filler words detected — your writing is tight and purposeful."}
+
+    top = sorted(details.items(), key=lambda x: x[1], reverse=True)[:5]
+    top_str = ", ".join(f"'{w}' ({c}×)" for w, c in top)
+
+    return {
+        "summary": (
+            f"{total} filler word{'s' if total != 1 else ''} found ({unique} unique). "
+            f"Most frequent: {top_str}. "
+            "Filler words dilute your message. Removing them makes sentences crisper. "
+            "Read each sentence aloud — if a word can be dropped without changing meaning, cut it."
+        )
+    }
+
+
+def explain_cliches(cl: Dict[str, Any]) -> Dict[str, str]:
+    """Generate explanations for cliché detection."""
+    if not cl:
+        return {"summary": "Cliché analysis was not performed."}
+
+    count = cl.get("cliches_found", 0)
+    if count == 0:
+        return {"summary": "No clichés detected — your language feels fresh and original."}
+
+    cliches_list = cl.get("cliches", [])
+    examples = ", ".join(f'"{c.get("cliche", "")}"' for c in cliches_list[:3])
+
+    return {
+        "summary": (
+            f"{count} cliché{'s' if count != 1 else ''} found (e.g. {examples}). "
+            "Clichés are overused phrases that have lost their impact. "
+            "Replace them with original imagery or direct language to make your writing stand out."
+        )
+    }
+
+
+def explain_vocabulary(vc: Dict[str, Any]) -> Dict[str, str]:
+    """Generate explanations for vocabulary complexity."""
+    if not vc:
+        return {"summary": "Vocabulary analysis was not performed."}
+
+    diversity = vc.get("lexical_diversity", 0)
+    level = vc.get("complexity_level", "unknown")
+    advanced = vc.get("advanced_words", 0)
+
+    return {
+        "summary": (
+            f"Vocabulary diversity: {diversity*100:.0f}% · Level: {level} · "
+            f"Advanced words: {advanced}. "
+            f"{'Excellent range — you use a rich variety of words.' if diversity > 0.7 else ''}"
+            f"{'Good diversity — room for a few more varied word choices.' if 0.4 <= diversity <= 0.7 else ''}"
+            f"{'Low diversity — many repeated words. A thesaurus can help.' if diversity < 0.4 else ''}"
+        ),
+        "interpretation": vc.get("interpretation", ""),
+    }
