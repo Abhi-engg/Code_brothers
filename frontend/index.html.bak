@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Writing Assistant - AI-Powered Writing Analysis</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#10B981',
+                        accent: '#8B5CF6',
+                        dark: '#1F2937',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <header class="bg-white shadow-sm border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
+                        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                        </svg>
+                    </div>
+                    <h1 class="text-2xl font-bold text-gray-900">OptiText</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span id="api-status" class="flex items-center text-sm text-gray-500">
+                        <span class="w-2 h-2 bg-gray-400 rounded-full mr-2"></span>
+                        Checking API...
+                    </span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- Left Panel: Input -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Text Input Card -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="p-4 border-b border-gray-200 bg-gray-50">
+                        <h2 class="font-semibold text-gray-900">Text Input</h2>
+                        <p class="text-sm text-gray-500">Enter or paste your text below for analysis</p>
+                    </div>
+                    <div class="p-4">
+                        <textarea 
+                            id="text-input" 
+                            class="w-full h-64 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent resize-none text-gray-900"
+                            placeholder="Start typing or paste your text here...
+
+Try this example: Dr. Sarah Johnson presented her findings at MIT yesterday. She's gonna explain why the results are super important for the industry. Johnson worked really hard on this research project for three years and the team is excited about the breakthrough."
+                        ></textarea>
+                        <div class="mt-3 flex items-center justify-between">
+                            <div class="text-sm text-gray-500">
+                                <span id="char-count">0</span> characters | <span id="word-count">0</span> words
+                            </div>
+                            <div class="flex space-x-3">
+                                <button id="clear-btn" class="px-4 py-2 text-sm text-gray-600 hover:text-gray-900 transition">
+                                    Clear
+                                </button>
+                                <button id="analyze-btn" class="px-6 py-2 bg-primary text-white rounded-lg hover:bg-blue-600 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed">
+                                    Analyze Text
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Results Tabs -->
+                <div id="results-container" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hidden">
+                    <div class="border-b border-gray-200 overflow-x-auto">
+                        <nav class="flex -mb-px whitespace-nowrap" id="result-tabs">
+                            <button class="tab-btn active px-4 py-3 text-sm font-medium border-b-2 border-primary text-primary" data-tab="write">
+                                ✍️ Write
+                            </button>
+                            <button class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="overview">
+                                📊 Overview
+                            </button>
+                            <button class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="issues">
+                                ⚠️ Issues
+                            </button>
+                            <button class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="enhancements">
+                                ✨ Enhanced
+                            </button>
+                            <button class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="tone">
+                                🎭 Tone
+                            </button>
+                            <button class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="suggestions">
+                                💡 Suggestions
+                            </button>
+                            <button class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="transform">
+                                🔄 Transform
+                            </button>
+                            <button class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="narrative">
+                                📖 Narrative
+                            </button>
+                            <button class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="mindmap">
+                                🧠 Mind Map
+                            </button>
+                            <button class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="antipatterns">
+                                🚫 Improve
+                            </button>
+                            <button class="tab-btn px-4 py-3 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700" data-tab="details">
+                                📋 Details
+                            </button>
+                        </nav>
+                    </div>
+                    
+                    <!-- Tab Content -->
+                    <div id="tab-content" class="p-6">
+                        <!-- Content will be dynamically inserted -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Settings & Scores -->
+            <div class="space-y-6">
+                <!-- Feature Toggles -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="p-4 border-b border-gray-200 bg-gray-50">
+                        <h2 class="font-semibold text-gray-900">Feature Toggles</h2>
+                    </div>
+                    <div class="p-4 space-y-3">
+                        <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="checkbox" id="feat-readability" checked class="w-4 h-4 text-primary rounded focus:ring-primary">
+                            <span class="text-sm text-gray-700">Readability Analysis</span>
+                        </label>
+                        <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="checkbox" id="feat-flow" checked class="w-4 h-4 text-primary rounded focus:ring-primary">
+                            <span class="text-sm text-gray-700">Flow Analysis</span>
+                        </label>
+                        <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="checkbox" id="feat-style" checked class="w-4 h-4 text-primary rounded focus:ring-primary">
+                            <span class="text-sm text-gray-700">Style Detection</span>
+                        </label>
+                        <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="checkbox" id="feat-consistency" checked class="w-4 h-4 text-primary rounded focus:ring-primary">
+                            <span class="text-sm text-gray-700">Consistency Check</span>
+                        </label>
+                        <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="checkbox" id="feat-transform" class="w-4 h-4 text-primary rounded focus:ring-primary">
+                            <span class="text-sm text-gray-700">Style Transformation</span>
+                        </label>
+                        <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="checkbox" id="feat-mindmap" checked class="w-4 h-4 text-primary rounded focus:ring-primary">
+                            <span class="text-sm text-gray-700">🧠 Mind Map</span>
+                        </label>
+                        <label class="flex items-center space-x-3 cursor-pointer">
+                            <input type="checkbox" id="feat-antipatterns" checked class="w-4 h-4 text-primary rounded focus:ring-primary">
+                            <span class="text-sm text-gray-700">🚫 Anti-Patterns</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Style Selector -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="p-4 border-b border-gray-200 bg-gray-50">
+                        <h2 class="font-semibold text-gray-900">Target Style</h2>
+                    </div>
+                    <div class="p-4">
+                        <select id="target-style" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            <option value="formal">Formal — Professional & polished</option>
+                            <option value="casual">Casual — Relaxed & conversational</option>
+                            <option value="academic">Academic — Scholarly & precise</option>
+                            <option value="creative">Creative — Vivid & expressive</option>
+                            <option value="persuasive">Persuasive — Compelling & action-driven</option>
+                            <option value="journalistic">Journalistic — Clear & concise</option>
+                            <option value="narrative">Narrative — Storytelling & immersive</option>
+                        </select>
+                        <p class="text-xs text-gray-500 mt-2" id="style-description">Enable "Style Transformation" toggle to apply</p>
+                    </div>
+                </div>
+
+                <!-- Tone Selector -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="p-4 border-b border-gray-200 bg-gray-50">
+                        <h2 class="font-semibold text-gray-900">Target Tone</h2>
+                        <p class="text-xs text-gray-500 mt-1">Detect or transform tone</p>
+                    </div>
+                    <div class="p-4">
+                        <select id="target-tone" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            <option value="auto" selected>Auto-detect</option>
+                            <option value="assertive">🔴 Assertive</option>
+                            <option value="empathetic">💗 Empathetic</option>
+                            <option value="persuasive">🟡 Persuasive</option>
+                            <option value="professional">🔵 Professional</option>
+                            <option value="friendly">🟢 Friendly</option>
+                            <option value="urgent">🟠 Urgent</option>
+                            <option value="narrative">🟣 Narrative</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Settings -->
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div class="p-4 border-b border-gray-200 bg-gray-50">
+                        <h2 class="font-semibold text-gray-900">Settings</h2>
+                    </div>
+                    <div class="p-4 space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Long Sentence Threshold</label>
+                            <input type="number" id="threshold-sentence" value="25" min="15" max="50" 
+                                class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            <p class="text-xs text-gray-500 mt-1">Words per sentence (default: 25)</p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-1">Repeated Word Count</label>
+                            <input type="number" id="threshold-repeated" value="3" min="2" max="10"
+                                class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                            <p class="text-xs text-gray-500 mt-1">Minimum occurrences to flag (default: 3)</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Score Cards -->
+                <div id="scores-container" class="space-y-3 hidden">
+                    <h3 class="font-semibold text-gray-900">Analysis Scores</h3>
+                    
+                    <div class="score-card bg-white rounded-lg border border-gray-200 p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-medium text-gray-600">Overall Score</span>
+                            <span id="score-overall" class="text-xl font-bold text-primary">--</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div id="score-overall-bar" class="bg-primary h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <div class="score-card bg-white rounded-lg border border-gray-200 p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-medium text-gray-600">Readability</span>
+                            <span id="score-readability" class="text-lg font-semibold text-secondary">--</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div id="score-readability-bar" class="bg-secondary h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <div class="score-card bg-white rounded-lg border border-gray-200 p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-medium text-gray-600">Flow</span>
+                            <span id="score-flow" class="text-lg font-semibold text-accent">--</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div id="score-flow-bar" class="bg-accent h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <div class="score-card bg-white rounded-lg border border-gray-200 p-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm font-medium text-gray-600">Consistency</span>
+                            <span id="score-consistency" class="text-lg font-semibold text-yellow-500">--</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-2">
+                            <div id="score-consistency-bar" class="bg-yellow-500 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl p-8 flex flex-col items-center">
+            <div class="animate-spin rounded-full h-12 w-12 border-4 border-primary border-t-transparent"></div>
+            <p class="mt-4 text-gray-600 font-medium">Analyzing your text...</p>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 space-y-2"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
