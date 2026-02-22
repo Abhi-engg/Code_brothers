@@ -22,11 +22,22 @@ from backend.models import (
     TransformResponse,
     ErrorResponse,
     HealthResponse,
-    TargetStyle
+    TargetStyle,
+    WriterModeType
 )
 
 # Import the NLP engine
-from nlp_engine import WritingAssistant, analyze_text, NarrativeConsistencyAnalyzer
+from nlp_engine import (
+    WritingAssistant, 
+    analyze_text, 
+    NarrativeConsistencyAnalyzer,
+    # Phase 9: Creative writing modules
+    analyze_character_consistency,
+    analyze_dialogue_quality,
+    analyze_scenes,
+    analyze_with_mode,
+    get_available_modes
+)
 
 # Global instances (loaded once)
 assistant: Optional[WritingAssistant] = None
@@ -152,6 +163,12 @@ async def analyze_endpoint(request: AnalysisRequest):
         if request.features:
             features = request.features.model_dump()
         
+        # Pass writer_mode from request body to features
+        if request.writer_mode:
+            if features is None:
+                features = {}
+            features["writer_mode"] = request.writer_mode
+        
         # Run analysis
         results = configured_assistant.analyze(request.text, features)
         
@@ -195,6 +212,11 @@ async def analyze_endpoint(request: AnalysisRequest):
             mind_map=results.get("mind_map"),
             # Anti-patterns (Phase 8)
             antipatterns=results.get("antipatterns"),
+            # Phase 9: Creative Writing Features
+            character_analysis=results.get("character_analysis"),
+            dialogue_analysis=results.get("dialogue_analysis"),
+            scene_analysis=results.get("scene_analysis"),
+            writer_mode_analysis=results.get("writer_mode_analysis"),
         )
         
     except Exception as e:
@@ -334,6 +356,167 @@ async def analyze_consistency_endpoint(request: AnalysisRequest):
             status_code=500,
             detail=f"Consistency analysis failed: {str(e)}"
         )
+
+
+# ========== Phase 9: Creative Writing Endpoints ==========
+
+@app.post("/analyze/characters", tags=["Creative Writing"])
+async def analyze_characters_endpoint(request: AnalysisRequest):
+    """
+    Analyze character consistency in narrative text.
+    
+    Features:
+    - Character identification and tracking
+    - Trait analysis and consistency checking
+    - Relationship detection between characters
+    - Dialogue attribution analysis
+    - Character arc analysis
+    
+    Returns comprehensive character analysis with consistency issues and suggestions.
+    """
+    global assistant
+    
+    if assistant is None:
+        assistant = WritingAssistant()
+    
+    try:
+        doc = assistant.nlp(request.text)
+        result = analyze_character_consistency(doc, request.text)
+        
+        return {
+            "success": True,
+            **result
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Character analysis failed: {str(e)}"
+        )
+
+
+@app.post("/analyze/dialogue", tags=["Creative Writing"])
+async def analyze_dialogue_endpoint(request: AnalysisRequest):
+    """
+    Analyze dialogue quality and provide improvement suggestions.
+    
+    Features:
+    - Speech tag analysis and variety assessment
+    - Dialogue pacing and clustering detection
+    - Common dialogue issues detection (said+adverb, talking heads, etc.)
+    - Authenticity assessment
+    - Actionable improvement suggestions
+    
+    Returns dialogue analysis with quality score and improvement examples.
+    """
+    global assistant
+    
+    if assistant is None:
+        assistant = WritingAssistant()
+    
+    try:
+        doc = assistant.nlp(request.text)
+        result = analyze_dialogue_quality(doc, request.text)
+        
+        return {
+            "success": True,
+            **result
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Dialogue analysis failed: {str(e)}"
+        )
+
+
+@app.post("/analyze/scenes", tags=["Creative Writing"])
+async def analyze_scenes_endpoint(request: AnalysisRequest):
+    """
+    Analyze scene structure and provide feedback.
+    
+    Features:
+    - Scene segmentation and detection
+    - Opening and closing strength assessment
+    - Sensory detail analysis
+    - Tension and conflict detection
+    - Scene transitions evaluation
+    - Overall pacing analysis
+    
+    Returns scene-by-scene analysis with actionable feedback.
+    """
+    global assistant
+    
+    if assistant is None:
+        assistant = WritingAssistant()
+    
+    try:
+        doc = assistant.nlp(request.text)
+        result = analyze_scenes(doc, request.text)
+        
+        return {
+            "success": True,
+            **result
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Scene analysis failed: {str(e)}"
+        )
+
+
+@app.post("/analyze/mode/{mode}", tags=["Creative Writing"])
+async def analyze_with_mode_endpoint(
+    mode: WriterModeType,
+    request: AnalysisRequest
+):
+    """
+    Analyze text using a specific writer mode perspective.
+    
+    Available modes:
+    - **fiction**: Focus on storytelling, characters, and narrative flow
+    - **academic**: Focus on clarity, citations, and formal structure
+    - **creative**: Emphasis on voice, imagery, and artistic expression
+    - **journalism**: Focus on facts, objectivity, and inverted pyramid
+    - **technical**: Focus on accuracy, actionability, and clarity
+    - **screenplay**: Focus on visual writing and dialogue economy
+    - **poetry**: Focus on rhythm, imagery, and sound devices
+    
+    Returns mode-specific analysis with tailored feedback and scoring.
+    """
+    global assistant
+    
+    if assistant is None:
+        assistant = WritingAssistant()
+    
+    try:
+        doc = assistant.nlp(request.text)
+        result = analyze_with_mode(doc, request.text, mode.value)
+        
+        return {
+            "success": True,
+            **result
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Mode analysis failed: {str(e)}"
+        )
+
+
+@app.get("/writer-modes", tags=["Creative Writing"])
+async def get_writer_modes():
+    """
+    Get a list of all available writer modes with descriptions.
+    
+    Returns a list of modes with their names and descriptions.
+    """
+    return {
+        "success": True,
+        "modes": get_available_modes()
+    }
 
 
 @app.exception_handler(Exception)

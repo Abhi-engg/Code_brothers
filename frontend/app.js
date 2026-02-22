@@ -46,7 +46,10 @@ const featureToggles = {
     transform:     document.getElementById('feat-transform'),
     mindmap:       document.getElementById('feat-mindmap'),
     antipatterns:  document.getElementById('feat-antipatterns'),
+    dialogue:      document.getElementById('feat-dialogue'),
 };
+
+const writerModeSelect = document.getElementById('writer-mode');
 
 // ═══════════════════════════════════════════════════════════
 // INITIALIZATION
@@ -112,6 +115,9 @@ async function analyzeText() {
         explanations:  true,
         mind_map:      featureToggles.mindmap?.checked ?? true,
         antipatterns:  featureToggles.antipatterns?.checked ?? true,
+        dialogue_improver:     featureToggles.dialogue?.checked ?? true,
+        scene_feedback:        false,
+        writer_mode:   writerModeSelect?.value || 'fiction',
     };
 
     const body = {
@@ -121,6 +127,7 @@ async function analyzeText() {
         target_tone:  elements.targetTone?.value || 'auto',
         long_sentence_threshold:  parseInt(elements.thresholdSentence?.value) || 25,
         repeated_word_min_count:  parseInt(elements.thresholdRepeated?.value) || 3,
+        writer_mode:  writerModeSelect?.value || 'fiction',
     };
 
     elements.loadingOverlay.classList.remove('hidden');
@@ -133,7 +140,11 @@ async function analyzeText() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
         });
-        if (!r.ok) { const e = await r.json(); throw new Error(e.detail || 'Analysis failed'); }
+        if (!r.ok) { 
+            const e = await r.json(); 
+            const errorMsg = typeof e.detail === 'string' ? e.detail : (e.detail?.msg || e.message || JSON.stringify(e.detail) || 'Analysis failed');
+            throw new Error(errorMsg); 
+        }
 
         analysisResults = await r.json();
         console.log('Analysis Results:', analysisResults);
@@ -141,7 +152,8 @@ async function analyzeText() {
         showToast('Analysis complete!', 'success');
     } catch (err) {
         console.error('Analysis error:', err);
-        showToast(err.message || 'Failed to analyze text', 'error');
+        const errorMessage = typeof err === 'string' ? err : (err.message || 'Failed to analyze text');
+        showToast(errorMessage, 'error');
     } finally {
         elements.loadingOverlay.classList.add('hidden');
         elements.analyzeBtn.disabled = false;
@@ -215,6 +227,7 @@ function renderTab(tab) {
         case 'grammar':      html = renderGrammar(); break;
         case 'style':        html = renderStyleTone(); break;
         case 'narrative':    html = renderNarrative(); break;
+        case 'dialogue':     html = renderDialogue(); break;
         case 'insights':     html = renderInsights(); break;
         case 'antipatterns': html = renderAntiPatterns(); break;
         case 'improve':      html = renderImprove(); break;
@@ -1233,6 +1246,131 @@ function renderImprove() {
         <p class="font-semibold" style="font-size:1.1rem">No Improvements Needed!</p>
         <p class="text-muted text-sm">Your writing is in excellent shape.</p></div>`;
     }
+
+    html += '</div>';
+    return html;
+}
+
+
+
+// ═══════════════════════════════════════════════════════════
+//  TAB — DIALOGUE (Dialogue Analysis)
+// ═══════════════════════════════════════════════════════════
+
+function renderDialogue() {
+    const da = analysisResults.dialogue_analysis;
+    if (!da || da.error || !da.dialogues || da.dialogues.length === 0) {
+        return `<div style="text-align:center;padding:48px 0" class="animate-fade-in">
+            <div style="font-size:3rem;margin-bottom:8px">💬</div>
+            <p class="font-semibold">No Dialogue Detected</p>
+            <p class="text-sm text-muted">Submit text with dialogue (quoted speech) for analysis.</p>
+            ${da?.error ? `<p class="text-xs" style="color:var(--wc-error);margin-top:12px">Error: ${_esc(da.error)}</p>` : ''}
+        </div>`;
+    }
+
+    const { dialogues, tag_analysis, pacing, issues, suggestions, authenticity, quality_score } = da;
+    let html = '<div class="animate-fade-in">';
+
+    // Calculate summary stats
+    const avgWords = dialogues.length > 0 ? Math.round(dialogues.reduce((a, d) => a + (d.word_count || 0), 0) / dialogues.length) : 0;
+    
+    // Summary
+    html += `<div class="wc-write-summary">
+        <div class="wc-stat"><span class="wc-stat-value">${dialogues.length}</span><span class="wc-stat-label">Dialogue Lines</span></div>
+        <div class="wc-stat"><span class="wc-stat-value">${avgWords}</span><span class="wc-stat-label">Avg Words</span></div>
+        <div class="wc-stat"><span class="wc-stat-value">${quality_score || '--'}</span><span class="wc-stat-label">Quality</span></div>
+        <div class="wc-stat"><span class="wc-stat-value">${issues?.length || 0}</span><span class="wc-stat-label">Issues</span></div>
+    </div>`;
+
+    // Tag Analysis
+    if (tag_analysis) {
+        html += `<div class="wc-card mb-md"><div class="wc-card-header"><h3>🏷️ Speech Tag Analysis</h3></div><div class="wc-card-body">
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+                <span class="wc-badge wc-badge-primary">Unique tags: ${tag_analysis.unique_tag_count || 0}</span>
+                <span class="wc-badge ${tag_analysis.variety_score > 60 ? 'wc-badge-success' : 'wc-badge-warning'}">Variety score: ${tag_analysis.variety_score || 0}</span>
+            </div>
+            ${tag_analysis.tag_categories ? `<div class="text-sm" style="margin-bottom:8px">
+                <span class="wc-badge wc-badge-muted">Basic: ${tag_analysis.tag_categories.basic || 0}</span>
+                <span class="wc-badge wc-badge-muted">Expressive: ${tag_analysis.tag_categories.expressive || 0}</span>
+                <span class="wc-badge wc-badge-muted">No tag: ${tag_analysis.tag_categories.none || 0}</span>
+            </div>` : ''}
+            ${tag_analysis.recommendation ? `<p class="text-sm text-muted">💡 ${_esc(tag_analysis.recommendation)}</p>` : ''}
+            ${tag_analysis.overused_tags?.length > 0 ? `<p class="text-xs text-muted">⚠️ Overused: ${tag_analysis.overused_tags.join(', ')}</p>` : ''}
+        </div></div>`;
+    }
+
+    // Pacing Analysis
+    if (pacing) {
+        html += `<div class="wc-card mb-md"><div class="wc-card-header"><h3>⏱️ Dialogue Pacing</h3></div><div class="wc-card-body">
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+                <span class="wc-badge wc-badge-primary">Density: ${(pacing.dialogue_density || 0).toFixed(0)}%</span>
+                <span class="wc-badge wc-badge-muted">${_esc(pacing.pacing || 'balanced')}</span>
+            </div>
+            <p class="text-sm">Dialogue sentences: <strong>${pacing.dialogue_sentences || 0}</strong> | Narrative: <strong>${pacing.narrative_sentences || 0}</strong></p>
+            ${pacing.avg_dialogue_gap ? `<p class="text-xs text-muted">Avg gap between dialogues: ${pacing.avg_dialogue_gap.toFixed(0)} chars</p>` : ''}
+        </div></div>`;
+    }
+
+    // Authenticity
+    if (authenticity) {
+        html += `<div class="wc-card mb-md"><div class="wc-card-header"><h3>🎭 Authenticity</h3></div><div class="wc-card-body">
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+                <span class="wc-badge wc-badge-primary">Style: ${_esc(authenticity.style || 'neutral')}</span>
+            </div>
+            ${authenticity.feedback ? `<p class="text-sm">${_esc(authenticity.feedback)}</p>` : ''}
+            ${authenticity.tip ? `<p class="text-xs text-muted">💡 ${_esc(authenticity.tip)}</p>` : ''}
+        </div></div>`;
+    }
+
+    // Suggestions
+    if (suggestions && suggestions.length > 0) {
+        html += `<div class="wc-card mb-md"><div class="wc-card-header"><h3>💡 Suggestions</h3></div><div class="wc-card-body">`;
+        for (const sug of suggestions.slice(0, 5)) {
+            const priorityBadge = sug.priority === 'high' ? 'wc-badge-error' : sug.priority === 'medium' ? 'wc-badge-warning' : 'wc-badge-muted';
+            html += `<div class="gram-issue">
+                <div class="gram-issue-header">
+                    <span class="gram-issue-type">${_esc(sug.title || sug.category)}</span>
+                    <span class="wc-badge ${priorityBadge}">${_esc(sug.priority)}</span>
+                </div>
+                <p class="gram-issue-text">${_esc(sug.description)}</p>
+                ${sug.examples ? `<p class="text-xs text-muted">Examples: ${_esc(sug.examples)}</p>` : ''}
+            </div>`;
+        }
+        html += '</div></div>';
+    }
+
+    // Dialogue Issues
+    if (issues && issues.length > 0) {
+        html += `<div class="wc-card mb-md"><div class="wc-card-header"><h3>⚠️ Dialogue Issues</h3>
+            <span class="wc-badge wc-badge-warning">${issues.length} issues</span></div><div class="wc-card-body">`;
+        for (const issue of issues.slice(0, 8)) {
+            const sevColor = issue.severity === 'high' ? '--wc-error' : issue.severity === 'medium' ? '--wc-warning' : '--wc-success';
+            html += `<div class="gram-issue" style="border-left-color:var(${sevColor})">
+                <div class="gram-issue-header">
+                    <span class="gram-issue-type">${_esc(issue.type || 'Issue')}</span>
+                    <span class="wc-badge wc-badge-${issue.severity === 'high' ? 'error' : 'warning'}">${_esc(issue.severity)}</span>
+                </div>
+                <p class="gram-issue-text">"${_esc(truncateText(issue.text || issue.dialogue, 120))}"</p>
+                ${issue.suggestion ? `<p class="gram-issue-fix">💡 ${_esc(issue.suggestion)}</p>` : ''}
+            </div>`;
+        }
+        html += '</div></div>';
+    }
+
+    // Sample Dialogues
+    html += `<div class="wc-card mb-md"><div class="wc-card-header"><h3>💬 Dialogue Samples</h3></div><div class="wc-card-body" style="max-height:300px;overflow-y:auto">`;
+    for (const d of dialogues.slice(0, 10)) {
+        html += `<div class="gram-issue">
+            <p class="gram-issue-text">"${_esc(truncateText(d.text || d.content, 150))}"</p>
+            <div style="display:flex;gap:6px;margin-top:4px">
+                <span class="wc-badge wc-badge-muted">${d.word_count || 0} words</span>
+                ${d.speech_tag ? `<span class="wc-badge wc-badge-muted">${_esc(d.speech_tag)}</span>` : '<span class="wc-badge wc-badge-muted">no tag</span>'}
+                ${d.has_action_beat ? '<span class="wc-badge wc-badge-success">action beat</span>' : ''}
+            </div>
+        </div>`;
+    }
+    if (dialogues.length > 10) html += `<p class="text-xs text-muted">+${dialogues.length - 10} more dialogue lines</p>`;
+    html += '</div></div>';
 
     html += '</div>';
     return html;

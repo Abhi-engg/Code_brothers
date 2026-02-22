@@ -30,6 +30,17 @@ class ToneType(str, Enum):
     NARRATIVE = "narrative"
 
 
+class WriterModeType(str, Enum):
+    """Available writer modes for analysis"""
+    FICTION = "fiction"
+    ACADEMIC = "academic"
+    CREATIVE = "creative"
+    JOURNALISM = "journalism"
+    TECHNICAL = "technical"
+    SCREENPLAY = "screenplay"
+    POETRY = "poetry"
+
+
 class FeatureToggles(BaseModel):
     """Feature toggles for analysis"""
     text_analysis: bool = Field(default=True, description="Enable basic text analysis (tokens, sentences, entities)")
@@ -42,6 +53,11 @@ class FeatureToggles(BaseModel):
     explanations: bool = Field(default=True, description="Generate explanations")
     mind_map: bool = Field(default=True, description="Generate concept mind map")
     antipatterns: bool = Field(default=True, description="Detect writing anti-patterns")
+    # Phase 9: Creative writing features
+    character_consistency: bool = Field(default=True, description="Enable character tracking and consistency analysis")
+    dialogue_improver: bool = Field(default=True, description="Enable dialogue quality analysis")
+    scene_feedback: bool = Field(default=True, description="Enable scene structure analysis")
+    writer_mode: Optional[str] = Field(default=None, description="Writer mode: fiction, academic, creative, journalism, technical, screenplay, poetry")
 
 
 class AnalysisRequest(BaseModel):
@@ -52,6 +68,7 @@ class AnalysisRequest(BaseModel):
     target_tone: Optional[ToneType] = Field(default=ToneType.AUTO, description="Target tone for tone transformation")
     long_sentence_threshold: Optional[int] = Field(default=25, ge=10, le=200, description="Word count threshold for long sentences")
     repeated_word_min_count: Optional[int] = Field(default=3, ge=2, le=10, description="Minimum count for repeated word detection")
+    writer_mode: Optional[str] = Field(default="fiction", description="Writer mode for analysis")
     
     class Config:
         json_schema_extra = {
@@ -68,7 +85,8 @@ class AnalysisRequest(BaseModel):
                 },
                 "target_style": "formal",
                 "long_sentence_threshold": 25,
-                "repeated_word_min_count": 3
+                "repeated_word_min_count": 3,
+                "writer_mode": "fiction"
             }
         }
 
@@ -157,6 +175,11 @@ class AnalysisResponse(BaseModel):
     mind_map: Optional[Dict[str, Any]] = None
     # Anti-patterns (Phase 8)
     antipatterns: Optional[Dict[str, Any]] = None
+    # Phase 9: Creative Writing Features
+    character_analysis: Optional[Dict[str, Any]] = None
+    dialogue_analysis: Optional[Dict[str, Any]] = None
+    scene_analysis: Optional[Dict[str, Any]] = None
+    writer_mode_analysis: Optional[Dict[str, Any]] = None
     
     class Config:
         json_schema_extra = {

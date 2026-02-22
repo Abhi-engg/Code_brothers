@@ -16,6 +16,11 @@ from . import explanation
 from . import grammar_checker
 from . import concept_extractor
 from . import antipatterns
+# Phase 9: New creative writing modules
+from . import character_consistency
+from . import dialogue_improver
+from . import scene_feedback
+from . import writer_modes
 
 
 class WritingAssistant:
@@ -80,7 +85,12 @@ class WritingAssistant:
             "transform": False,
             "explanations": True,
             "mind_map": True,
-            "antipatterns": True
+            "antipatterns": True,
+            # Phase 9: Creative writing features
+            "character_consistency": True,
+            "dialogue_improver": True,
+            "scene_feedback": True,
+            "writer_mode": None  # Can be: fiction, academic, creative, journalism, technical, screenplay, poetry
         }
         features = {**default_features, **(features or {})}
         
@@ -100,7 +110,12 @@ class WritingAssistant:
             "issues": {},
             "suggestions": [],
             "explanations": {},
-            "scores": {}
+            "scores": {},
+            # Phase 9: Creative writing results
+            "character_analysis": {},
+            "dialogue_analysis": {},
+            "scene_analysis": {},
+            "writer_mode_analysis": {}
         }
         
         # Step 1: Core text analysis (required for other steps)
@@ -214,6 +229,37 @@ class WritingAssistant:
                 results["antipatterns"] = antipatterns.detect_all_antipatterns(doc, text)
             except Exception as e:
                 results["antipatterns"] = {"error": str(e), "categories": {}, "summary": {"total": 0, "critical": 0, "moderate": 0, "minor": 0}}
+        
+        # Phase 9: Creative Writing Features
+        
+        # Character Consistency Analysis
+        if features.get("character_consistency", True):
+            try:
+                results["character_analysis"] = character_consistency.analyze_character_consistency(doc, text)
+            except Exception as e:
+                results["character_analysis"] = {"error": str(e), "characters": [], "character_count": 0}
+        
+        # Dialogue Improver
+        if features.get("dialogue_improver", True):
+            try:
+                results["dialogue_analysis"] = dialogue_improver.analyze_dialogue_quality(doc, text)
+            except Exception as e:
+                results["dialogue_analysis"] = {"error": str(e), "has_dialogue": False, "dialogue_count": 0}
+        
+        # Scene Feedback
+        if features.get("scene_feedback", True):
+            try:
+                results["scene_analysis"] = scene_feedback.analyze_scenes(doc, text)
+            except Exception as e:
+                results["scene_analysis"] = {"error": str(e), "scene_count": 0, "scenes": []}
+        
+        # Writer Mode Analysis (if mode specified)
+        writer_mode = features.get("writer_mode")
+        if writer_mode:
+            try:
+                results["writer_mode_analysis"] = writer_modes.analyze_with_mode(doc, text, writer_mode)
+            except Exception as e:
+                results["writer_mode_analysis"] = {"error": str(e), "mode": writer_mode}
         
         return results
     

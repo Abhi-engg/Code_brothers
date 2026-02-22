@@ -65,7 +65,8 @@ Press Ctrl+Enter to analyze."></textarea>
                     <p>Enter or paste text on the left, then click <strong>Analyze</strong> to unlock comprehensive writing insights.</p>
                     <div class="wc-empty-features">
                         <span>✍️ Annotations</span><span>🔤 Grammar</span><span>🎨 Style & Tone</span>
-                        <span>📖 Narrative</span><span>💡 Insights</span><span>🚫 Anti-Patterns</span><span>🎯 Improve</span>
+                        <span>📖 Narrative</span><span>💬 Dialogue</span>
+                        <span>💡 Insights</span><span>🚫 Anti-Patterns</span><span>🎯 Improve</span>
                     </div>
                 </div>
 
@@ -101,6 +102,7 @@ Press Ctrl+Enter to analyze."></textarea>
                         <button class="wc-tab" data-tab="grammar">🔤 Grammar</button>
                         <button class="wc-tab" data-tab="style">🎨 Style & Tone</button>
                         <button class="wc-tab" data-tab="narrative">📖 Narrative</button>
+                        <button class="wc-tab" data-tab="dialogue">💬 Dialogue</button>
                         <button class="wc-tab" data-tab="insights">💡 Insights</button>
                         <button class="wc-tab" data-tab="antipatterns">🚫 Anti-Patterns</button>
                         <button class="wc-tab" data-tab="improve">🎯 Improve</button>
@@ -131,6 +133,19 @@ Press Ctrl+Enter to analyze."></textarea>
                     <label class="wc-toggle"><input type="checkbox" id="feat-mindmap" checked><span>Mind Map</span></label>
                     <label class="wc-toggle"><input type="checkbox" id="feat-antipatterns" checked><span>Anti-Patterns</span></label>
                     <label class="wc-toggle"><input type="checkbox" id="feat-transform"><span>Style Transformation</span></label>
+                    <label class="wc-toggle"><input type="checkbox" id="feat-dialogue" checked><span>Dialogue Analysis</span></label>
+                </div>
+                <div class="wc-settings-group">
+                    <h4>Writer Mode</h4>
+                    <select id="writer-mode" class="wc-select">
+                        <option value="fiction" selected>📚 Fiction — Novel & story writing</option>
+                        <option value="academic">🎓 Academic — Research & essays</option>
+                        <option value="creative_nonfiction">✨ Creative Nonfiction — Memoirs & essays</option>
+                        <option value="journalism">📰 Journalism — News & articles</option>
+                        <option value="technical">⚙️ Technical — Documentation & manuals</option>
+                        <option value="screenplay">🎬 Screenplay — Scripts & dialogue</option>
+                        <option value="poetry">🎭 Poetry — Verse & lyrics</option>
+                    </select>
                 </div>
                 <div class="wc-settings-group">
                     <h4>Target Style</h4>
@@ -183,6 +198,6 @@ Press Ctrl+Enter to analyze."></textarea>
     <!-- Toast Container -->
     <div id="toast-container" class="wc-toasts"></div>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=6"></script>
 </body>
 </html>

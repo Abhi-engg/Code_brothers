@@ -23,6 +23,12 @@ Usage:
 from .pipeline import WritingAssistant, analyze_text
 from .consistency_checker import NarrativeConsistencyAnalyzer, run_narrative_tracker
 
+# NEW: Import new modules for Phase 9 features
+from .character_consistency import CharacterTracker, analyze_character_consistency
+from .dialogue_improver import DialogueAnalyzer, analyze_dialogue_quality, get_dialogue_improvements
+from .scene_feedback import SceneAnalyzer, analyze_scenes, get_scene_feedback
+from .writer_modes import ModeAnalyzer, WriterMode, analyze_with_mode, get_available_modes
+
 # Module-level exports for direct access
 from . import text_analyzer
 from . import enhancer
@@ -32,6 +38,10 @@ from . import explanation
 from . import grammar_checker
 from . import concept_extractor
 from . import antipatterns
+from . import character_consistency
+from . import dialogue_improver
+from . import scene_feedback
+from . import writer_modes
 
 __all__ = [
     "WritingAssistant",
@@ -44,7 +54,24 @@ __all__ = [
     "explanation",
     "grammar_checker",
     "concept_extractor",
-    "antipatterns"
+    "antipatterns",
+    # Phase 9: New modules
+    "CharacterTracker",
+    "analyze_character_consistency",
+    "DialogueAnalyzer",
+    "analyze_dialogue_quality",
+    "get_dialogue_improvements",
+    "SceneAnalyzer",
+    "analyze_scenes",
+    "get_scene_feedback",
+    "ModeAnalyzer",
+    "WriterMode",
+    "analyze_with_mode",
+    "get_available_modes",
+    "character_consistency",
+    "dialogue_improver",
+    "scene_feedback",
+    "writer_modes"
 ]
 
 __version__ = "1.0.0"
