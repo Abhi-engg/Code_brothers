@@ -202,6 +202,29 @@ async function llmAnalyzeStory(text) {
     }
 }
 
+// LLM AI Improvement Suggestions
+async function llmGetImprovements(text, focusAreas = null) {
+    if (!llmAvailable) {
+        showToast('LLM is not available. Make sure Ollama is running.', 'error');
+        return null;
+    }
+    try {
+        const r = await fetch(`${CONFIG.API_BASE_URL}/improve/ai`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, focus_areas: focusAreas })
+        });
+        return await r.json();
+    } catch (e) {
+        showToast('AI improvement failed: ' + e.message, 'error');
+        return null;
+    }
+}
+
+// AI Improvement state
+let aiImprovementsData = null;
+let aiImproveLoading = false;
+
 // ═══════════════════════════════════════════════════════════
 // AI STYLE TRANSFORM UI HANDLER
 // ═══════════════════════════════════════════════════════════
@@ -375,6 +398,7 @@ function clearAll() {
     elements.resultsContainer.classList.add('hidden');
     elements.emptyState.classList.remove('hidden');
     analysisResults = null;
+    aiImprovementsData = null;
     currentTab = 'write';
 }
 
@@ -413,8 +437,8 @@ function renderTab(tab) {
 
     if (tab === 'write')        bindWriteTabEvents();
     if (tab === 'mindmap')      requestAnimationFrame(() => setTimeout(() => initMindElixir(), 200));
-    if (tab === 'insights')     requestAnimationFrame(() => setTimeout(() => initMindMapNetwork(), 200));
     if (tab === 'antipatterns')  setTimeout(() => bindAntiPatternEvents(), 60);
+    if (tab === 'improve')       setTimeout(() => bindAIImproveButton(), 60);
 }
 
 
@@ -983,75 +1007,11 @@ function _narCard(emoji, label, value) {
 
 
 // ═══════════════════════════════════════════════════════════
-//  TAB 5 — INSIGHTS (Mind Map + Readability + Stats)
+//  TAB 5 — INSIGHTS (Readability + Stats)
 // ═══════════════════════════════════════════════════════════
-
-const MIND_MAP_GROUP_META = {
-    character:    { label: 'Characters',    icon: '👤', color: '#3B82F6' },
-    organization: { label: 'Organizations', icon: '🏢', color: '#6366F1' },
-    location:     { label: 'Locations',     icon: '📍', color: '#10B981' },
-    time:         { label: 'Time',          icon: '🕐', color: '#F59E0B' },
-    event:        { label: 'Events',        icon: '⚡', color: '#EC4899' },
-    theme:        { label: 'Themes',        icon: '💡', color: '#F59E0B' },
-    action:       { label: 'Actions',       icon: '🎯', color: '#EF4444' },
-    detail:       { label: 'Details',       icon: '📎', color: '#94A3B8' },
-    concept:      { label: 'Concepts',      icon: '🔮', color: '#8B5CF6' },
-    other:        { label: 'Other',         icon: '📌', color: '#CBD5E1' },
-};
-let mindMapVisibleGroups = new Set(Object.keys(MIND_MAP_GROUP_META));
-let mindMapNetworkInstance = null;
 
 function renderInsights() {
     let html = '<div class="animate-fade-in">';
-
-    // ── Mind Map ──
-    const mapData = analysisResults.mind_map;
-    if (mapData && !mapData.error && mapData.nodes?.length > 0) {
-        const { nodes, edges, central_node, stats } = mapData;
-        const groupCounts = {};
-        for (const n of nodes) groupCounts[n.group] = (groupCounts[n.group] || 0) + 1;
-
-        let legendHtml = '<div class="mm-legend">';
-        for (const [grp, meta] of Object.entries(MIND_MAP_GROUP_META)) {
-            const c = groupCounts[grp] || 0;
-            if (c === 0) continue;
-            const active = mindMapVisibleGroups.has(grp);
-            legendHtml += `<button class="mm-legend-btn ${active ? 'active' : 'inactive'}" data-group="${grp}" style="--grp-color:${meta.color}"><span class="mm-legend-dot" style="background:${meta.color}"></span><span>${meta.icon} ${meta.label}</span><span class="mm-legend-count">${c}</span></button>`;
-        }
-        legendHtml += '</div>';
-
-        let conceptListHtml = '<div class="mm-concept-list"><h4 class="mm-concept-list-title">Key Concepts</h4>';
-        const sortedNodes = [...nodes].sort((a, b) => b.importance - a.importance);
-        for (const n of sortedNodes) {
-            const meta = MIND_MAP_GROUP_META[n.group] || MIND_MAP_GROUP_META.other;
-            conceptListHtml += `<div class="mm-concept-item" data-node-id="${n.id}" title="${_esc(n.label)} (${n.type})">
-                <div class="mm-concept-icon" style="color:${meta.color}">${meta.icon}</div>
-                <div class="mm-concept-info"><div class="mm-concept-name">${_esc(n.label)}</div>
-                <div class="mm-concept-bar-track"><div class="mm-concept-bar" style="width:${Math.max(4,n.importance)}%;background:${meta.color}"></div></div></div>
-                <div class="mm-concept-score">${n.importance}</div>
-            </div>`;
-        }
-        conceptListHtml += '</div>';
-
-        html += `<div class="mm-container">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-                <h3 style="font-size:1.05rem;font-weight:600;display:flex;align-items:center;gap:8px">🧠 Concept Mind Map</h3>
-                <div style="display:flex;gap:6px">
-                    <button id="mm-btn-fit" class="mm-toolbar-btn">⊞ Fit</button>
-                    <button id="mm-btn-physics" class="mm-toolbar-btn">⚛️ Physics</button>
-                </div>
-            </div>
-            <div class="mm-stats"><span>🧠 <strong>${stats.total_nodes}</strong> concepts</span><span class="mm-stats-sep">·</span><span>🔗 <strong>${stats.total_edges}</strong> connections</span><span class="mm-stats-sep">·</span><span>⭐ Central: <strong>${_esc(central_node || '—')}</strong></span></div>
-            ${legendHtml}
-            <div class="mm-layout">
-                <div class="mm-graph-wrap">
-                    <div id="mm-network" class="mm-network"></div>
-                    <div class="mm-hint">Drag to pan · Scroll to zoom · Click node to highlight</div>
-                </div>
-                ${conceptListHtml}
-            </div>
-        </div>`;
-    }
 
     // ── Readability & Stats Grid ──
     const rd = analysisResults.readability;
@@ -1148,141 +1108,6 @@ function renderInsights() {
 
     html += '</div>';
     return html;
-}
-
-function initMindMapNetwork(retryCount) {
-    retryCount = retryCount || 0;
-
-    // Guard: vis.js must be loaded
-    if (typeof vis === 'undefined' || typeof vis.Network !== 'function') {
-        console.error('[MindMap] vis-network library not loaded');
-        return;
-    }
-
-    const container = document.getElementById('mm-network');
-    if (!container) { console.warn('[MindMap] container #mm-network not found'); return; }
-
-    // Ensure the container has real dimensions; retry if 0 (flex not yet resolved)
-    const cw = container.offsetWidth, ch = container.offsetHeight;
-    if ((cw === 0 || ch === 0) && retryCount < 5) {
-        console.info(`[MindMap] container ${cw}x${ch}, retry ${retryCount+1}/5`);
-        setTimeout(() => initMindMapNetwork(retryCount + 1), 200);
-        return;
-    }
-    // Force explicit dimensions so vis.js canvas doesn't collapse
-    container.style.width  = Math.max(cw, 300) + 'px';
-    container.style.height = Math.max(ch, 400) + 'px';
-
-    const mapData = analysisResults.mind_map;
-    if (!mapData || !mapData.nodes || mapData.nodes.length === 0) return;
-
-    const visibleNodes = mapData.nodes.filter(n => mindMapVisibleGroups.has(n.group));
-    const visibleIds = new Set(visibleNodes.map(n => n.id));
-    const visibleEdges = (mapData.edges || []).filter(e => visibleIds.has(e.from) && visibleIds.has(e.to));
-
-    const nodesData = visibleNodes.map(n => {
-        const fontOpts = {
-            size: n.font_size || 14,
-            color: (n.color && n.color.fontColor) || '#ffffff',
-            strokeWidth: 2,
-            strokeColor: 'rgba(0,0,0,0.3)',
-            face: "'Inter', system-ui, sans-serif",
-        };
-        if (n.is_central) {
-            fontOpts.bold = { color: fontOpts.color, size: (n.font_size || 14) + 2 };
-        }
-        return {
-            id: n.id, label: n.label || '', size: n.size || 25,
-            color: {
-                background: (n.color && n.color.background) || '#3B82F6',
-                border:     (n.color && n.color.border)     || '#2563EB',
-                highlight:  { background: (n.color && n.color.background) || '#3B82F6', border: '#1E293B' },
-                hover:      { background: (n.color && n.color.background) || '#3B82F6', border: '#1E293B' },
-            },
-            font: fontOpts,
-            shape: n.is_central ? 'star' : 'dot',
-            borderWidth: n.is_central ? 3 : 2,
-            shadow: { enabled: true, color: 'rgba(0,0,0,0.15)', size: 8, x: 2, y: 2 },
-            title: `${n.label}\nType: ${n.type}\nImportance: ${n.importance}%`,
-        };
-    });
-
-    const edgesData = visibleEdges.map((e, i) => ({
-        id: i, from: e.from, to: e.to,
-        label: (e.label || '').length > 18 ? e.label.slice(0, 16) + '…' : (e.label || ''),
-        width: e.width || 1,
-        color: { color: '#94A3B8', highlight: '#3B82F6', hover: '#64748B' },
-        font: { size: 9, color: '#64748B', strokeWidth: 0, align: 'middle', face: 'system-ui' },
-        arrows: { to: { enabled: false } },
-        smooth: { type: 'continuous', roundness: 0.3 },
-    }));
-
-    const options = {
-        physics: { enabled: true, solver: 'forceAtlas2Based', forceAtlas2Based: { gravitationalConstant: -40, centralGravity: 0.008, springLength: 140, springConstant: 0.04, damping: 0.4, avoidOverlap: 0.6 }, stabilization: { iterations: 200, updateInterval: 25 } },
-        interaction: { hover: true, tooltipDelay: 200, zoomView: true, dragView: true, dragNodes: true, navigationButtons: false, keyboard: false },
-        layout: { improvedLayout: true, randomSeed: 42 },
-        nodes: { shape: 'dot', scaling: { min: 15, max: 55 } },
-        edges: { smooth: { type: 'continuous' } },
-    };
-
-    if (mindMapNetworkInstance) { try { mindMapNetworkInstance.destroy(); } catch(_){} mindMapNetworkInstance = null; }
-
-    try {
-        const network = new vis.Network(container, { nodes: new vis.DataSet(nodesData), edges: new vis.DataSet(edgesData) }, options);
-        mindMapNetworkInstance = network;
-
-        // Force a redraw + fit after a short delay
-        setTimeout(() => {
-            try { network.redraw(); network.fit({ animation: false }); } catch(_){}
-        }, 400);
-
-        network.on('selectNode', (params) => {
-            const nodeId = params.nodes[0];
-            document.querySelectorAll('.mm-concept-item').forEach(el => el.classList.toggle('mm-concept-active', parseInt(el.dataset.nodeId) === nodeId));
-            network.selectEdges(network.getConnectedEdges(nodeId));
-        });
-        network.on('deselectNode', () => {
-            document.querySelectorAll('.mm-concept-item').forEach(el => el.classList.remove('mm-concept-active'));
-        });
-
-        document.querySelectorAll('.mm-legend-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const grp = btn.dataset.group;
-                mindMapVisibleGroups.has(grp) ? mindMapVisibleGroups.delete(grp) : mindMapVisibleGroups.add(grp);
-                elements.tabContent.innerHTML = renderInsights();
-                requestAnimationFrame(() => setTimeout(() => initMindMapNetwork(), 200));
-            });
-        });
-
-        document.querySelectorAll('.mm-concept-item').forEach(el => {
-            el.addEventListener('click', () => {
-                const nodeId = parseInt(el.dataset.nodeId);
-                network.selectNodes([nodeId]);
-                network.focus(nodeId, { scale: 1.2, animation: { duration: 400, easingFunction: 'easeInOutQuad' } });
-                document.querySelectorAll('.mm-concept-item').forEach(e => e.classList.remove('mm-concept-active'));
-                el.classList.add('mm-concept-active');
-            });
-        });
-
-        const fitBtn = document.getElementById('mm-btn-fit');
-        const physicsBtn = document.getElementById('mm-btn-physics');
-        if (fitBtn) fitBtn.addEventListener('click', () => network.fit({ animation: { duration: 500, easingFunction: 'easeInOutQuad' } }));
-        let physicsOn = true;
-        if (physicsBtn) physicsBtn.addEventListener('click', () => {
-            physicsOn = !physicsOn;
-            network.setOptions({ physics: { enabled: physicsOn } });
-            physicsBtn.textContent = physicsOn ? '⚛️ Physics' : '📌 Locked';
-        });
-        network.once('stabilizationIterationsDone', () => {
-            network.fit({ animation: { duration: 300, easingFunction: 'easeInOutQuad' } });
-            // Secondary safety: force redraw after fit
-            setTimeout(() => { try { network.redraw(); } catch(_){} }, 500);
-        });
-
-        console.info(`[MindMap] rendered ${nodesData.length} nodes, ${edgesData.length} edges in ${cw}x${ch} container`);
-    } catch (err) {
-        console.error('[MindMap] Failed to create vis.Network:', err);
-    }
 }
 
 
@@ -2052,6 +1877,35 @@ function bindAntiPatternEvents() {
 function renderImprove() {
     let html = '<div class="animate-fade-in">';
 
+    // ── AI Writing Assistant (TOP) ──
+    html += `<div class="wc-card mb-md ai-improve-section">
+        <div class="wc-card-header">
+            <div class="ai-header-title">
+                <h3>✦ Smart Writing Assistant</h3>
+                <span class="ai-badge">Powered by LLM</span>
+            </div>
+            <button id="ai-improve-btn" class="wc-btn wc-btn-primary wc-btn-sm" ${!llmAvailable ? 'disabled title="LLM not available"' : ''}>
+                ${aiImproveLoading ? '⏳ Analyzing...' : '🔍 Analyze & Improve'}
+            </button>
+        </div>
+        <div class="wc-card-body">
+            <div id="ai-improve-result">
+                ${aiImprovementsData ? renderAIImprovements(aiImprovementsData) : `
+                    <div class="ai-improve-placeholder">
+                        <p class="text-muted text-sm">Get intelligent, context-aware suggestions to enhance your writing quality.</p>
+                        <div class="ai-improve-features">
+                            <span>📝 Clarity</span>
+                            <span>✂️ Conciseness</span>
+                            <span>💫 Engagement</span>
+                            <span>🔄 Flow</span>
+                            <span>📚 Word Choice</span>
+                        </div>
+                    </div>
+                `}
+            </div>
+        </div>
+    </div>`;
+
     // ── Enhanced Features Quick Cards ──
     const pv = analysisResults.passive_voice;
     const fw = analysisResults.filler_words;
@@ -2137,14 +1991,115 @@ function renderImprove() {
     }
 
     // Nothing to improve
-    if (allSuggestions.length === 0 && pvCount === 0 && fwCount === 0 && clCount === 0) {
+    if (allSuggestions.length === 0 && pvCount === 0 && fwCount === 0 && clCount === 0 && !aiImprovementsData) {
         html += `<div style="text-align:center;padding:48px 0"><div style="font-size:3rem;margin-bottom:8px">🎉</div>
         <p class="font-semibold" style="font-size:1.1rem">No Improvements Needed!</p>
-        <p class="text-muted text-sm">Your writing is in excellent shape.</p></div>`;
+        <p class="text-muted text-sm">Your writing is in excellent shape. Try AI suggestions for advanced recommendations.</p></div>`;
     }
 
     html += '</div>';
     return html;
+}
+
+function renderAIImprovements(data) {
+    if (!data || !data.success) {
+        return `<div class="ai-improve-error">
+            <p>❌ ${_esc(data?.error || 'Failed to generate suggestions')}</p>
+        </div>`;
+    }
+
+    let html = '';
+    
+    // Score and Summary
+    html += `<div class="ai-improve-header">
+        <div class="ai-improve-score">
+            <div class="ai-score-circle" style="--score-color: ${getScoreColor(data.overall_score)}">
+                <span class="ai-score-value">${data.overall_score}</span>
+            </div>
+            <span class="ai-score-label">Quality Score</span>
+        </div>
+        <div class="ai-improve-summary">
+            <p>${_esc(data.summary)}</p>
+            <span class="text-xs text-muted">Generated in ${Math.round(data.generation_time_ms)}ms</span>
+        </div>
+    </div>`;
+
+    // Suggestions by category
+    if (data.suggestions?.length > 0) {
+        const categoryIcons = {
+            clarity: '📝',
+            conciseness: '✂️',
+            engagement: '💫',
+            flow: '🔄',
+            word_choice: '📚'
+        };
+        const priorityColors = {
+            high: '#EF4444',
+            medium: '#F59E0B',
+            low: '#10B981'
+        };
+
+        html += '<div class="ai-suggestions-list">';
+        for (const sug of data.suggestions) {
+            const icon = categoryIcons[sug.category] || '💡';
+            const prioColor = priorityColors[sug.priority] || '#6B7280';
+            
+            html += `<div class="ai-suggestion-item">
+                <div class="ai-suggestion-header">
+                    <span class="ai-suggestion-category">${icon} ${sug.category.replace('_', ' ')}</span>
+                    <span class="ai-suggestion-priority" style="color: ${prioColor}">${sug.priority}</span>
+                </div>
+                <p class="ai-suggestion-issue">${_esc(sug.issue)}</p>
+                <div class="ai-suggestion-compare">
+                    <div class="ai-suggestion-original">
+                        <span class="label">Original:</span>
+                        <span class="text">${_esc(sug.original)}</span>
+                    </div>
+                    <div class="ai-suggestion-arrow">→</div>
+                    <div class="ai-suggestion-improved">
+                        <span class="label">Improved:</span>
+                        <span class="text">${_esc(sug.suggestion)}</span>
+                    </div>
+                </div>
+                <p class="ai-suggestion-explanation">💡 ${_esc(sug.explanation)}</p>
+            </div>`;
+        }
+        html += '</div>';
+    }
+
+    return html;
+}
+
+async function triggerAIImprove() {
+    const text = analysisResults?.input?.text || elements.textInput.value;
+    if (!text || text.trim().length < 10) {
+        showToast('Please provide more text for AI analysis', 'warning');
+        return;
+    }
+
+    aiImproveLoading = true;
+    renderTab('improve');
+    
+    try {
+        const result = await llmGetImprovements(text);
+        aiImprovementsData = result;
+    } catch (e) {
+        aiImprovementsData = { success: false, error: e.message };
+    }
+    
+    aiImproveLoading = false;
+    renderTab('improve');
+    
+    // Bind button event again
+    setTimeout(bindAIImproveButton, 100);
+}
+
+function bindAIImproveButton() {
+    const btn = document.getElementById('ai-improve-btn');
+    if (btn) {
+        btn.removeEventListener('click', triggerAIImprove);
+        btn.addEventListener('click', triggerAIImprove);
+    }
 }
 
 
