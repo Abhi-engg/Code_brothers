@@ -1,0 +1,1384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Writer Studio — AI Writing Tools</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6366F1;
+            --primary-light: #818CF8;
+            --primary-dark: #4F46E5;
+            --accent: #F59E0B;
+            --success: #10B981;
+            --error: #EF4444;
+            --bg: #FAFBFC;
+            --bg-dark: #F1F5F9;
+            --surface: #FFFFFF;
+            --surface-hover: #F8FAFC;
+            --border: #E2E8F0;
+            --border-light: #F1F5F9;
+            --text: #1E293B;
+            --text-secondary: #475569;
+            --text-muted: #94A3B8;
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+            --shadow: 0 4px 12px rgba(0,0,0,0.08);
+            --shadow-lg: 0 12px 40px rgba(0,0,0,0.12);
+            --radius: 12px;
+            --radius-lg: 16px;
+            --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+        
+        /* Header */
+        .header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 32px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(12px);
+        }
+        
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.25rem;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+        
+        .logo-text {
+            font-family: 'Playfair Display', serif;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+        
+        .logo-badge {
+            font-size: 0.65rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 4px 8px;
+            background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary) 100%);
+            color: white;
+            border-radius: 6px;
+            margin-left: 8px;
+        }
+        
+        .status-pill {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: var(--bg);
+            border-radius: 20px;
+            font-size: 0.85rem;
+            transition: var(--transition);
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            transition: var(--transition);
+        }
+        
+        .status-pill.connected .status-dot {
+            background: var(--success);
+            box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        
+        /* Main Container */
+        .main {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 32px;
+        }
+        
+        /* Section Tabs */
+        .section-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 32px;
+            padding: 6px;
+            background: var(--surface);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border);
+            width: fit-content;
+        }
+        
+        .section-tab {
+            padding: 12px 24px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            font-weight: 500;
+            border-radius: var(--radius);
+            cursor: pointer;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .section-tab:hover {
+            color: var(--text);
+            background: var(--bg);
+        }
+        
+        .section-tab.active {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+        
+        .section-tab .tab-icon {
+            font-size: 1.1rem;
+        }
+        
+        /* Section Panels */
+        .section-panel {
+            display: none;
+            animation: fadeIn 0.4s ease;
+        }
+        
+        .section-panel.active {
+            display: block;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Cards */
+        .card {
+            background: var(--surface);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+            transition: var(--transition);
+        }
+        
+        .card:hover {
+            box-shadow: var(--shadow);
+            border-color: var(--border-light);
+        }
+        
+        .card-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border-light);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .card-title-icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary) 100%);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+        }
+        
+        .card-body {
+            padding: 24px;
+        }
+        
+        /* Two Column Layout */
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+        
+        @media (max-width: 1024px) {
+            .two-col { grid-template-columns: 1fr; }
+        }
+        
+        /* Form Elements */
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+        
+        .form-textarea {
+            width: 100%;
+            min-height: 200px;
+            padding: 16px;
+            border: 2px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 1rem;
+            font-family: inherit;
+            line-height: 1.7;
+            color: var(--text);
+            background: var(--bg);
+            resize: vertical;
+            transition: var(--transition);
+        }
+        
+        .form-textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            background: var(--surface);
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+        }
+        
+        .form-textarea::placeholder {
+            color: var(--text-muted);
+        }
+        
+        .form-input, .form-select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 0.95rem;
+            font-family: inherit;
+            color: var(--text);
+            background: var(--bg);
+            transition: var(--transition);
+        }
+        
+        .form-input:focus, .form-select:focus {
+            outline: none;
+            border-color: var(--primary);
+            background: var(--surface);
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+        }
+        
+        .form-select {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 40px;
+        }
+        
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border: none;
+            border-radius: var(--radius);
+            font-size: 0.95rem;
+            font-weight: 500;
+            font-family: inherit;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            color: white;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+        }
+        
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+        
+        .btn-secondary {
+            background: var(--bg);
+            color: var(--text-secondary);
+            border: 2px solid var(--border);
+        }
+        
+        .btn-secondary:hover {
+            background: var(--surface);
+            border-color: var(--primary-light);
+            color: var(--primary);
+        }
+        
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-secondary);
+            padding: 8px 16px;
+        }
+        
+        .btn-ghost:hover {
+            background: var(--bg);
+            color: var(--primary);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+        
+        .btn-group {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        
+        /* Loading Spinner */
+        .spinner {
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        
+        .btn-secondary .spinner {
+            border-color: rgba(99, 102, 241, 0.3);
+            border-top-color: var(--primary);
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* Result Box */
+        .result-box {
+            background: var(--bg);
+            border-radius: var(--radius);
+            padding: 20px;
+            border-left: 4px solid var(--primary);
+            margin-top: 20px;
+            animation: slideIn 0.3s ease;
+        }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-10px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        
+        .result-box.success {
+            border-left-color: var(--success);
+            background: linear-gradient(135deg, #ECFDF5 0%, #F0FDF4 100%);
+        }
+        
+        .result-box.error {
+            border-left-color: var(--error);
+            background: linear-gradient(135deg, #FEF2F2 0%, #FFF1F2 100%);
+        }
+        
+        .result-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+        
+        .result-text {
+            font-size: 1rem;
+            line-height: 1.8;
+            color: var(--text);
+        }
+        
+        .result-meta {
+            display: flex;
+            gap: 16px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+        
+        .result-meta span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        /* Quick Examples */
+        .examples {
+            padding-top: 16px;
+            border-top: 1px solid var(--border-light);
+            margin-top: 16px;
+        }
+        
+        .examples-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+        }
+        
+        .example-pills {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .example-pill {
+            padding: 8px 16px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        
+        .example-pill:hover {
+            background: var(--surface);
+            border-color: var(--primary);
+            color: var(--primary);
+            transform: translateY(-1px);
+        }
+        
+        /* Analysis Cards */
+        .analysis-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        
+        .analysis-item {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 12px 16px;
+            text-align: center;
+            transition: var(--transition);
+        }
+        
+        .analysis-item:hover {
+            border-color: var(--primary-light);
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .analysis-item .label {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+        
+        .analysis-item .value {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--primary);
+        }
+        
+        /* Continuation Options */
+        .option-card {
+            background: var(--surface);
+            border: 2px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        
+        .option-card:hover {
+            border-color: var(--primary);
+            box-shadow: var(--shadow);
+            transform: translateY(-2px);
+        }
+        
+        .option-card .option-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+        
+        .option-card .option-type {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 4px 10px;
+            background: var(--bg);
+            border-radius: 6px;
+            color: var(--primary);
+        }
+        
+        .option-card .option-confidence {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+        
+        .option-card .option-text {
+            font-size: 0.95rem;
+            line-height: 1.6;
+            color: var(--text-secondary);
+        }
+        
+        /* Mode Toggle */
+        .mode-toggle {
+            display: flex;
+            gap: 12px;
+            padding: 4px;
+            background: var(--bg);
+            border-radius: var(--radius);
+            width: fit-content;
+        }
+        
+        .mode-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: var(--transition);
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+        
+        .mode-option:hover {
+            background: var(--surface);
+        }
+        
+        .mode-option.active {
+            background: var(--surface);
+            color: var(--primary);
+            box-shadow: var(--shadow-sm);
+        }
+        
+        .mode-option input {
+            display: none;
+        }
+        
+        /* Settings Row */
+        .settings-row {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        
+        .settings-row .form-group {
+            flex: 1;
+            min-width: 150px;
+        }
+        
+        /* Hidden */
+        .hidden { display: none !important; }
+        
+        /* Smooth scrolling */
+        html { scroll-behavior: smooth; }
+        
+        /* Divider */
+        .divider {
+            height: 1px;
+            background: var(--border);
+            margin: 32px 0;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <div class="logo-icon">✦</div>
+                <span class="logo-text">Writer Studio</span>
+                <span class="logo-badge">AI</span>
+            </div>
+            <div class="status-pill" id="statusPill">
+                <div class="status-dot"></div>
+                <span id="statusText">Connecting...</span>
+            </div>
+        </div>
+    </header>
+    
+    <!-- Main Content -->
+    <main class="main">
+        <!-- Section Tabs -->
+        <div class="section-tabs">
+            <button class="section-tab active" data-section="story" onclick="switchSection('story')">
+                <span class="tab-icon">📖</span>
+                Continue Writing
+            </button>
+            <button class="section-tab" data-section="enhance" onclick="switchSection('enhance')">
+                <span class="tab-icon">✨</span>
+                Enhance Text
+            </button>
+            <button class="section-tab" data-section="style" onclick="switchSection('style')">
+                <span class="tab-icon">🎨</span>
+                Style Transform
+            </button>
+        </div>
+        
+        <!-- Story Continuation Section -->
+        <section class="section-panel active" id="section-story">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <div class="card-title-icon">📖</div>
+                        <span>Continue Your Story</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="two-col">
+                        <!-- Input Side -->
+                        <div>
+                            <div class="form-group">
+                                <label class="form-label">Your Story</label>
+                                <textarea class="form-textarea" id="storyText" placeholder="Paste your story here or use an example below...
+
+The AI will analyze the narrative style, characters, and tone to generate a seamless continuation."></textarea>
+                            </div>
+                            
+                            <div class="settings-row">
+                                <div class="form-group">
+                                    <label class="form-label">Word Target</label>
+                                    <input type="number" class="form-input" id="wordTarget" value="150" min="50" max="500" step="25">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Direction (optional)</label>
+                                    <input type="text" class="form-input" id="customInstruction" placeholder="e.g., Build tension...">
+                                </div>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label class="form-label">Mode</label>
+                                <div class="mode-toggle">
+                                    <label class="mode-option active" onclick="setStoryMode('normal', this)">
+                                        <input type="radio" name="storyMode" value="normal" checked>
+                                        ⚡ Normal
+                                    </label>
+                                    <label class="mode-option" onclick="setStoryMode('stream', this)">
+                                        <input type="radio" name="storyMode" value="stream">
+                                        📝 Streaming
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="btn-group">
+                                <button class="btn btn-secondary" onclick="analyzeStory()" id="analyzeBtn">
+                                    <span id="analyzeBtnText">🔍 Analyze</span>
+                                </button>
+                                <button class="btn btn-primary" onclick="continueStory()" id="continueBtn">
+                                    <span id="continueBtnText">✦ Continue Story</span>
+                                </button>
+                                <button class="btn btn-secondary" onclick="generateOptions()" id="optionsBtn">
+                                    <span id="optionsBtnText">🎯 Get Options</span>
+                                </button>
+                            </div>
+                            
+                            <!-- Analysis Result -->
+                            <div id="storyAnalysis" class="hidden">
+                                <div class="result-box">
+                                    <div class="result-label">Story Analysis</div>
+                                    <div class="analysis-grid">
+                                        <div class="analysis-item">
+                                            <div class="label">POV</div>
+                                            <div class="value" id="analysisPov">—</div>
+                                        </div>
+                                        <div class="analysis-item">
+                                            <div class="label">Tense</div>
+                                            <div class="value" id="analysisTense">—</div>
+                                        </div>
+                                        <div class="analysis-item">
+                                            <div class="label">Tone</div>
+                                            <div class="value" id="analysisTone">—</div>
+                                        </div>
+                                        <div class="analysis-item">
+                                            <div class="label">Genre</div>
+                                            <div class="value" id="analysisGenre">—</div>
+                                        </div>
+                                    </div>
+                                    <div style="margin-top: 8px;">
+                                        <span class="result-label">Characters:</span>
+                                        <span id="analysisChars" style="color: var(--text-secondary);">—</span>
+                                    </div>
+                                    <div style="margin-top: 4px;">
+                                        <span class="result-label">Themes:</span>
+                                        <span id="analysisThemes" style="color: var(--text-secondary);">—</span>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="examples">
+                                <div class="examples-label">Quick Examples</div>
+                                <div class="example-pills">
+                                    <span class="example-pill" onclick="loadStoryExample('fantasy')">🧙 Fantasy</span>
+                                    <span class="example-pill" onclick="loadStoryExample('thriller')">🔎 Thriller</span>
+                                    <span class="example-pill" onclick="loadStoryExample('romance')">💕 Romance</span>
+                                    <span class="example-pill" onclick="loadStoryExample('scifi')">🚀 Sci-Fi</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Output Side -->
+                        <div>
+                            <div id="storyResult" class="hidden">
+                                <div class="result-box success">
+                                    <div class="result-label">Continuation</div>
+                                    <div class="result-text" id="continuationText"></div>
+                                    <div class="result-meta">
+                                        <span id="storyPov">—</span>
+                                        <span id="storyTense">—</span>
+                                        <span id="storyTime">—</span>
+                                    </div>
+                                </div>
+                                <div class="btn-group" style="margin-top: 16px;">
+                                    <button class="btn btn-ghost" onclick="copyContinuation()">📋 Copy</button>
+                                    <button class="btn btn-secondary" onclick="appendToStory()">➕ Append to Story</button>
+                                </div>
+                            </div>
+                            
+                            <div id="optionsResult" class="hidden">
+                                <div class="result-label" style="margin-bottom: 12px;">Choose a Direction</div>
+                                <div id="optionsList"></div>
+                            </div>
+                            
+                            <div id="storyPlaceholder">
+                                <div style="text-align: center; padding: 60px 20px; color: var(--text-muted);">
+                                    <div style="font-size: 3rem; margin-bottom: 16px; opacity: 0.5;">📖</div>
+                                    <p style="font-size: 0.95rem; max-width: 280px; margin: 0 auto;">Enter your story on the left and click <strong>Continue Story</strong> to generate a seamless continuation.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Text Enhancement Section -->
+        <section class="section-panel" id="section-enhance">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <div class="card-title-icon">✨</div>
+                        <span>Enhance Your Writing</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="two-col">
+                        <div>
+                            <div class="form-group">
+                                <label class="form-label">Text to Enhance</label>
+                                <textarea class="form-textarea" id="enhanceText" placeholder="Enter a sentence or paragraph to improve..."></textarea>
+                            </div>
+                            
+                            <div class="settings-row">
+                                <div class="form-group">
+                                    <label class="form-label">Issue Type</label>
+                                    <select class="form-select" id="issueType">
+                                        <option value="passive_voice">Passive Voice</option>
+                                        <option value="show_dont_tell">Show Don't Tell</option>
+                                        <option value="wordy">Wordy Sentence</option>
+                                        <option value="weak_verb">Weak Verb</option>
+                                        <option value="adverb_overuse">Adverb Overuse</option>
+                                        <option value="hedge_word">Hedge Words</option>
+                                        <option value="cliche">Cliché</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Context (optional)</label>
+                                    <input type="text" class="form-input" id="enhanceContext" placeholder="e.g., thriller novel">
+                                </div>
+                            </div>
+                            
+                            <button class="btn btn-primary" onclick="enhanceText()" id="enhanceBtn">
+                                <span id="enhanceBtnText">✨ Enhance</span>
+                            </button>
+                            
+                            <div class="examples">
+                                <div class="examples-label">Try These</div>
+                                <div class="example-pills">
+                                    <span class="example-pill" onclick="loadEnhanceExample('passive')">Passive Voice</span>
+                                    <span class="example-pill" onclick="loadEnhanceExample('showdont')">Show Don't Tell</span>
+                                    <span class="example-pill" onclick="loadEnhanceExample('wordy')">Wordy</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <div id="enhanceResult" class="hidden">
+                                <div class="result-box success">
+                                    <div class="result-label">Suggestion</div>
+                                    <div class="result-text" id="suggestionText"></div>
+                                </div>
+                                <div class="result-box" style="margin-top: 12px;">
+                                    <div class="result-label">Explanation</div>
+                                    <div class="result-text" id="explanationText" style="font-size: 0.9rem; color: var(--text-secondary);"></div>
+                                </div>
+                                <div class="result-meta">
+                                    <span>Confidence: <strong id="enhanceConfidence">—</strong></span>
+                                    <span>Time: <strong id="enhanceTime">—</strong></span>
+                                </div>
+                                <div class="btn-group" style="margin-top: 16px;">
+                                    <button class="btn btn-ghost" onclick="copySuggestion()">📋 Copy</button>
+                                    <button class="btn btn-secondary" onclick="useSuggestion()">↩ Use as Input</button>
+                                </div>
+                            </div>
+                            
+                            <div id="enhancePlaceholder">
+                                <div style="text-align: center; padding: 60px 20px; color: var(--text-muted);">
+                                    <div style="font-size: 3rem; margin-bottom: 16px; opacity: 0.5;">✨</div>
+                                    <p style="font-size: 0.95rem; max-width: 280px; margin: 0 auto;">Get AI-powered suggestions to improve clarity, strength, and impact.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Style Transform Section -->
+        <section class="section-panel" id="section-style">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <div class="card-title-icon">🎨</div>
+                        <span>Transform Writing Style</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="two-col">
+                        <div>
+                            <div class="form-group">
+                                <label class="form-label">Original Text</label>
+                                <textarea class="form-textarea" id="styleText" placeholder="Enter text to transform to a different style..."></textarea>
+                            </div>
+                            
+                            <div class="settings-row">
+                                <div class="form-group">
+                                    <label class="form-label">Target Style</label>
+                                    <select class="form-select" id="targetStyle">
+                                        <option value="formal">Formal</option>
+                                        <option value="casual">Casual</option>
+                                        <option value="academic">Academic</option>
+                                        <option value="creative">Creative</option>
+                                        <option value="persuasive">Persuasive</option>
+                                        <option value="journalistic">Journalistic</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Mode</label>
+                                    <div class="mode-toggle">
+                                        <label class="mode-option" onclick="setStyleMode('quick', this)">
+                                            <input type="radio" name="styleMode" value="quick">
+                                            ⚡ Quick
+                                        </label>
+                                        <label class="mode-option active" onclick="setStyleMode('deep', this)">
+                                            <input type="radio" name="styleMode" value="deep" checked>
+                                            🧠 Deep
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <button class="btn btn-primary" onclick="transformStyle()" id="transformBtn">
+                                <span id="transformBtnText">🎨 Transform</span>
+                            </button>
+                            
+                            <div class="examples">
+                                <div class="examples-label">Try These</div>
+                                <div class="example-pills">
+                                    <span class="example-pill" onclick="loadStyleExample('informal')">Informal → Formal</span>
+                                    <span class="example-pill" onclick="loadStyleExample('technical')">Technical → Casual</span>
+                                    <span class="example-pill" onclick="loadStyleExample('plain')">Plain → Creative</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <div id="styleResult" class="hidden">
+                                <div class="result-box success">
+                                    <div class="result-label">Transformed Text</div>
+                                    <div class="result-text" id="transformedText"></div>
+                                </div>
+                                <div class="result-meta">
+                                    <span>Style: <strong id="styleTarget">—</strong></span>
+                                    <span>Confidence: <strong id="styleConfidence">—</strong></span>
+                                    <span>Time: <strong id="styleTime">—</strong></span>
+                                </div>
+                                <div class="btn-group" style="margin-top: 16px;">
+                                    <button class="btn btn-ghost" onclick="copyTransformed()">📋 Copy</button>
+                                    <button class="btn btn-secondary" onclick="useTransformed()">↩ Use as Input</button>
+                                </div>
+                            </div>
+                            
+                            <div id="stylePlaceholder">
+                                <div style="text-align: center; padding: 60px 20px; color: var(--text-muted);">
+                                    <div style="font-size: 3rem; margin-bottom: 16px; opacity: 0.5;">🎨</div>
+                                    <p style="font-size: 0.95rem; max-width: 280px; margin: 0 auto;">Seamlessly transform your writing between different styles and tones.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        let currentStoryMode = 'normal';
+        let currentStyleMode = 'deep';
+        
+        // Story Examples
+        const STORY_EXAMPLES = {
+            fantasy: `The ancient tower had stood for a thousand years, its stones worn smooth by wind and rain. Maya placed her palm against the cold surface and felt it hum with dormant magic.
+
+"The spell requires blood," whispered the voice in her head—the same voice that had guided her here.
+
+She pulled out the silver dagger, its blade etched with symbols that matched those in the book.`,
+            thriller: `Detective Morgan stared at the crime scene photos spread across his desk. Three victims. Three weeks. Same MO.
+
+The killer left no forensic evidence, just a calling card—a single white chess piece placed on each body. A knight.
+
+His phone buzzed. Unknown number.
+
+"You're getting close, Detective. But not close enough."`,
+            romance: `The coffee shop was crowded, but Emma spotted him immediately—the same dark-haired stranger who'd caught her umbrella when the wind tore it from her hands last week.
+
+He looked up from his laptop, and their eyes met. A slight smile crossed his face.
+
+"The chair across from me is free," he said, gesturing.`,
+            scifi: `The colony ship Aurora had been drifting for three hundred years when Commander Chen found the anomaly.
+
+"It's not on any charts," Lieutenant Park said, studying the holographic display. "A planet, Class-M atmosphere, but there shouldn't be anything here."
+
+Chen zoomed in on the surface scan. Cities. Massive structures that defied physics.`
+        };
+        
+        // Enhance Examples
+        const ENHANCE_EXAMPLES = {
+            passive: { text: "The report was written by the team and was submitted before the deadline.", type: "passive_voice" },
+            showdont: { text: "She was very angry at him.", type: "show_dont_tell" },
+            wordy: { text: "In order to be able to successfully complete the project, we need to make use of all available resources.", type: "wordy" }
+        };
+        
+        // Style Examples
+        const STYLE_EXAMPLES = {
+            informal: { text: "Hey! Just wanted to let you know that the meeting got pushed back. No worries if you can't make it!", target: "formal" },
+            technical: { text: "The implementation utilizes a recursive algorithm with O(n log n) complexity for optimal performance characteristics.", target: "casual" },
+            plain: { text: "The sun set over the ocean. The water was orange and red.", target: "creative" }
+        };
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            checkStatus();
+        });
+        
+        // Check API Status
+        async function checkStatus() {
+            const pill = document.getElementById('statusPill');
+            const text = document.getElementById('statusText');
+            
+            try {
+                const res = await fetch(`${API_BASE}/llm/status`);
+                const data = await res.json();
+                
+                if (data.status === 'ok' && data.model_available) {
+                    pill.classList.add('connected');
+                    text.textContent = data.model || 'Connected';
+                } else {
+                    pill.classList.remove('connected');
+                    text.textContent = 'LLM Offline';
+                }
+            } catch (e) {
+                pill.classList.remove('connected');
+                text.textContent = 'Disconnected';
+            }
+        }
+        
+        // Section Switching
+        function switchSection(section) {
+            document.querySelectorAll('.section-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.section-panel').forEach(p => p.classList.remove('active'));
+            
+            document.querySelector(`[data-section="${section}"]`).classList.add('active');
+            document.getElementById(`section-${section}`).classList.add('active');
+        }
+        
+        // Mode Toggles
+        function setStoryMode(mode, el) {
+            currentStoryMode = mode;
+            el.closest('.mode-toggle').querySelectorAll('.mode-option').forEach(o => o.classList.remove('active'));
+            el.classList.add('active');
+        }
+        
+        function setStyleMode(mode, el) {
+            currentStyleMode = mode;
+            el.closest('.mode-toggle').querySelectorAll('.mode-option').forEach(o => o.classList.remove('active'));
+            el.classList.add('active');
+        }
+        
+        // Load Examples
+        function loadStoryExample(name) {
+            document.getElementById('storyText').value = STORY_EXAMPLES[name] || '';
+            document.getElementById('storyAnalysis').classList.add('hidden');
+            document.getElementById('storyResult').classList.add('hidden');
+            document.getElementById('optionsResult').classList.add('hidden');
+            document.getElementById('storyPlaceholder').classList.remove('hidden');
+        }
+        
+        function loadEnhanceExample(name) {
+            const ex = ENHANCE_EXAMPLES[name];
+            if (ex) {
+                document.getElementById('enhanceText').value = ex.text;
+                document.getElementById('issueType').value = ex.type;
+            }
+        }
+        
+        function loadStyleExample(name) {
+            const ex = STYLE_EXAMPLES[name];
+            if (ex) {
+                document.getElementById('styleText').value = ex.text;
+                document.getElementById('targetStyle').value = ex.target;
+            }
+        }
+        
+        // Story Functions
+        async function analyzeStory() {
+            const btn = document.getElementById('analyzeBtn');
+            const text = document.getElementById('storyText').value.trim();
+            
+            if (!text) { alert('Please enter story text'); return; }
+            
+            btn.disabled = true;
+            btn.innerHTML = '<div class="spinner"></div> Analyzing...';
+            
+            try {
+                const res = await fetch(`${API_BASE}/story/analyze`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text })
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    document.getElementById('analysisPov').textContent = data.pov?.replace(/_/g, ' ') || '—';
+                    document.getElementById('analysisTense').textContent = data.tense || '—';
+                    document.getElementById('analysisTone').textContent = data.tone || '—';
+                    document.getElementById('analysisGenre').textContent = data.genre_hint || '—';
+                    document.getElementById('analysisChars').textContent = data.characters?.map(c => c.name).join(', ') || 'None detected';
+                    document.getElementById('analysisThemes').textContent = data.themes?.join(', ') || 'None detected';
+                    document.getElementById('storyAnalysis').classList.remove('hidden');
+                }
+            } catch (e) {
+                alert('Analysis failed: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span id="analyzeBtnText">🔍 Analyze</span>';
+            }
+        }
+        
+        async function continueStory() {
+            const btn = document.getElementById('continueBtn');
+            const text = document.getElementById('storyText').value.trim();
+            const wordTarget = parseInt(document.getElementById('wordTarget').value) || 150;
+            const customInstruction = document.getElementById('customInstruction').value.trim();
+            
+            if (!text) { alert('Please enter story text'); return; }
+            
+            btn.disabled = true;
+            document.getElementById('storyPlaceholder').classList.add('hidden');
+            document.getElementById('optionsResult').classList.add('hidden');
+            document.getElementById('storyResult').classList.remove('hidden');
+            
+            const contText = document.getElementById('continuationText');
+            
+            if (currentStoryMode === 'stream') {
+                btn.innerHTML = '<div class="spinner"></div> Writing...';
+                contText.textContent = '';
+                
+                try {
+                    const res = await fetch(`${API_BASE}/story/continue`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text, word_target: wordTarget, custom_instruction: customInstruction, stream: true })
+                    });
+                    
+                    const reader = res.body.getReader();
+                    const decoder = new TextDecoder();
+                    
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        
+                        const chunk = decoder.decode(value);
+                        const lines = chunk.split('\n');
+                        
+                        for (const line of lines) {
+                            if (line.startsWith('data: ')) {
+                                try {
+                                    const data = JSON.parse(line.slice(6));
+                                    if (data.token) contText.textContent += data.token;
+                                    if (data.done) {
+                                        document.getElementById('storyPov').textContent = `POV: ${data.pov || '—'}`;
+                                        document.getElementById('storyTense').textContent = `Tense: ${data.tense || '—'}`;
+                                        document.getElementById('storyTime').textContent = `${Math.round(data.generation_time_ms || 0)}ms`;
+                                    }
+                                } catch {}
+                            }
+                        }
+                    }
+                } catch (e) {
+                    contText.textContent = 'Error: ' + e.message;
+                }
+            } else {
+                btn.innerHTML = '<div class="spinner"></div> Generating...';
+                
+                try {
+                    const res = await fetch(`${API_BASE}/story/continue`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text, word_target: wordTarget, custom_instruction: customInstruction, stream: false })
+                    });
+                    const data = await res.json();
+                    
+                    if (data.success) {
+                        contText.textContent = data.continuation;
+                        document.getElementById('storyPov').textContent = `POV: ${data.pov || '—'}`;
+                        document.getElementById('storyTense').textContent = `Tense: ${data.tense || '—'}`;
+                        document.getElementById('storyTime').textContent = `${Math.round(data.generation_time_ms || 0)}ms`;
+                    } else {
+                        contText.textContent = 'Error: ' + (data.error || 'Generation failed');
+                    }
+                } catch (e) {
+                    contText.textContent = 'Error: ' + e.message;
+                }
+            }
+            
+            btn.disabled = false;
+            btn.innerHTML = '<span id="continueBtnText">✦ Continue Story</span>';
+        }
+        
+        async function generateOptions() {
+            const btn = document.getElementById('optionsBtn');
+            const text = document.getElementById('storyText').value.trim();
+            
+            if (!text) { alert('Please enter story text'); return; }
+            
+            btn.disabled = true;
+            btn.innerHTML = '<div class="spinner"></div> Generating...';
+            document.getElementById('storyPlaceholder').classList.add('hidden');
+            document.getElementById('storyResult').classList.add('hidden');
+            
+            try {
+                const res = await fetch(`${API_BASE}/story/options`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, num_options: 3 })
+                });
+                const data = await res.json();
+                
+                if (data.success && data.options?.length > 0) {
+                    window.continuationOptions = data.options;
+                    
+                    const listEl = document.getElementById('optionsList');
+                    listEl.innerHTML = data.options.map((opt, i) => `
+                        <div class="option-card" onclick="useOption(${i})">
+                            <div class="option-header">
+                                <span class="option-type">${opt.direction}</span>
+                                <span class="option-confidence">${Math.round(opt.confidence * 100)}% confidence</span>
+                            </div>
+                            <div class="option-text">${opt.text}</div>
+                        </div>
+                    `).join('');
+                    
+                    document.getElementById('optionsResult').classList.remove('hidden');
+                }
+            } catch (e) {
+                alert('Options generation failed: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span id="optionsBtnText">🎯 Get Options</span>';
+            }
+        }
+        
+        function useOption(index) {
+            if (window.continuationOptions?.[index]) {
+                document.getElementById('continuationText').textContent = window.continuationOptions[index].text;
+                document.getElementById('storyResult').classList.remove('hidden');
+                document.getElementById('optionsResult').classList.add('hidden');
+            }
+        }
+        
+        function copyContinuation() {
+            navigator.clipboard.writeText(document.getElementById('continuationText').textContent);
+        }
+        
+        function appendToStory() {
+            const cont = document.getElementById('continuationText').textContent;
+            document.getElementById('storyText').value += '\n\n' + cont;
+            document.getElementById('storyResult').classList.add('hidden');
+            document.getElementById('storyPlaceholder').classList.remove('hidden');
+        }
+        
+        // Enhance Functions
+        async function enhanceText() {
+            const btn = document.getElementById('enhanceBtn');
+            const text = document.getElementById('enhanceText').value.trim();
+            const issueType = document.getElementById('issueType').value;
+            const context = document.getElementById('enhanceContext').value.trim();
+            
+            if (!text) { alert('Please enter text to enhance'); return; }
+            
+            btn.disabled = true;
+            btn.innerHTML = '<div class="spinner"></div> Enhancing...';
+            document.getElementById('enhancePlaceholder').classList.add('hidden');
+            
+            try {
+                const res = await fetch(`${API_BASE}/enhance/rewrite`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, issue_type: issueType, context })
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    document.getElementById('suggestionText').textContent = data.suggestion;
+                    document.getElementById('explanationText').textContent = data.explanation;
+                    document.getElementById('enhanceConfidence').textContent = Math.round((data.confidence || 0) * 100) + '%';
+                    document.getElementById('enhanceTime').textContent = Math.round(data.generation_time_ms || 0) + 'ms';
+                    document.getElementById('enhanceResult').classList.remove('hidden');
+                } else {
+                    alert('Enhancement failed: ' + (data.error || 'Unknown error'));
+                    document.getElementById('enhancePlaceholder').classList.remove('hidden');
+                }
+            } catch (e) {
+                alert('Enhancement failed: ' + e.message);
+                document.getElementById('enhancePlaceholder').classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span id="enhanceBtnText">✨ Enhance</span>';
+            }
+        }
+        
+        function copySuggestion() {
+            navigator.clipboard.writeText(document.getElementById('suggestionText').textContent);
+        }
+        
+        function useSuggestion() {
+            document.getElementById('enhanceText').value = document.getElementById('suggestionText').textContent;
+            document.getElementById('enhanceResult').classList.add('hidden');
+            document.getElementById('enhancePlaceholder').classList.remove('hidden');
+        }
+        
+        // Style Functions
+        async function transformStyle() {
+            const btn = document.getElementById('transformBtn');
+            const text = document.getElementById('styleText').value.trim();
+            const targetStyle = document.getElementById('targetStyle').value;
+            
+            if (!text) { alert('Please enter text to transform'); return; }
+            
+            btn.disabled = true;
+            btn.innerHTML = '<div class="spinner"></div> Transforming...';
+            document.getElementById('stylePlaceholder').classList.add('hidden');
+            
+            try {
+                const res = await fetch(`${API_BASE}/transform/style`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, target_style: targetStyle, mode: currentStyleMode })
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    document.getElementById('transformedText').textContent = data.transformed;
+                    document.getElementById('styleTarget').textContent = data.target_style;
+                    document.getElementById('styleConfidence').textContent = Math.round((data.confidence || 0) * 100) + '%';
+                    document.getElementById('styleTime').textContent = Math.round(data.generation_time_ms || 0) + 'ms';
+                    document.getElementById('styleResult').classList.remove('hidden');
+                } else {
+                    alert('Transformation failed: ' + (data.error || 'Unknown error'));
+                    document.getElementById('stylePlaceholder').classList.remove('hidden');
+                }
+            } catch (e) {
+                alert('Transformation failed: ' + e.message);
+                document.getElementById('stylePlaceholder').classList.remove('hidden');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<span id="transformBtnText">🎨 Transform</span>';
+            }
+        }
+        
+        function copyTransformed() {
+            navigator.clipboard.writeText(document.getElementById('transformedText').textContent);
+        }
+        
+        function useTransformed() {
+            document.getElementById('styleText').value = document.getElementById('transformedText').textContent;
+            document.getElementById('styleResult').classList.add('hidden');
+            document.getElementById('stylePlaceholder').classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
