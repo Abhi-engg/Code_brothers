@@ -38,7 +38,7 @@ btn.addEventListener('click', async () => {
     if(!res.ok) throw new Error('Server error');
     const data = await res.json();
     textOutput.textContent = text;
-    renderMindMap(data);
+    await renderMindMap(data);
     setActiveTab('map');
   }catch(err){
     textOutput.textContent = 'Error: '+err.message;
@@ -66,7 +66,7 @@ function convertToMindElixirFormat(hier){
   return { nodeData, rootId };
 }
 
-function renderMindMap(hier){
+async function renderMindMap(hier){
   // hier: { topic, children }
   const conv = convertToMindElixirFormat(hier);
   // Prepare data for MindElixir
@@ -80,10 +80,29 @@ function renderMindMap(hier){
   }
 
   // Create MindElixir instance (defensive)
-  const Ctor = getMindElixirCtor();
+  let Ctor = getMindElixirCtor();
   if (!Ctor) {
-    mindmapDiv.innerHTML = '<div style="padding:16px;color:#b91c1c">MindElixir library not found. Check your CDN script.</div>';
-    console.error('MindElixir not available on window');
+    console.warn('MindElixir ctor not found — attempting dynamic import fallback...');
+    // Try a dynamic import fallback (ESM) from unpkg
+    try{
+      const fallbackUrl = 'https://unpkg.com/mind-elixir@2.1.1/dist/index.js';
+      const mod = await import(fallbackUrl);
+      const maybeCtor = mod.MindElixir || mod.default || mod.ME || mod;
+      if(maybeCtor){
+        window.MindElixir = maybeCtor;
+        Ctor = getMindElixirCtor();
+        console.info('MindElixir loaded via dynamic import fallback');
+      }
+    }catch(e){
+      console.warn('Dynamic import fallback failed:', e);
+    }
+  }
+
+  if (!Ctor) {
+    // Diagnostic output to help debugging in the browser console
+    const keys = Object.keys(window).slice(0,200);
+    console.error('MindElixir not available on window. window keys (truncated):', keys);
+    mindmapDiv.innerHTML = '<div style="padding:16px;color:#b91c1c">MindElixir library not found. Check your CDN script. See console for diagnostics.</div>';
     return;
   }
 

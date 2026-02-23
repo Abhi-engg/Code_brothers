@@ -7,7 +7,8 @@ import sys
 import os
 from contextlib import asynccontextmanager
 from typing import Optional, List
-
+from fastapi import FastAPI
+from nlp_engine import process_story   
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -81,6 +82,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+@app.post("/process", tags=["Story"])
+def process(data: dict):
+    text = data.get("text", "")
+    mode = data.get("mode", None)
+    generate = data.get("generate", True)
+
+    result = process_story(text, mode, generate)
+    return result
 
 
 @app.get("/", tags=["Root"])

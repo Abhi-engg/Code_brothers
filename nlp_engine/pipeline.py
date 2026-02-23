@@ -6,7 +6,7 @@ Main orchestrator that integrates all NLP modules into a unified analysis pipeli
 import json
 from typing import Dict, List, Any, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
+from .generator import generate_story_continuation
 # Import all modules
 from . import text_analyzer
 from . import enhancer
@@ -750,6 +750,75 @@ def analyze_text(text: str, config: Optional[Dict[str, Any]] = None) -> Dict[str
     """
     assistant = WritingAssistant(config)
     return assistant.analyze(text)
+
+
+class StoryState:
+    """Simple in-memory story state for iterative generation/testing."""
+    def __init__(self):
+        self._parts: List[str] = []
+
+    def add_text(self, txt: str):
+        if txt:
+            self._parts.append(txt)
+
+    def get_text(self) -> str:
+        return "\n".join(self._parts)
+
+
+# Global story state instance (simple, process-local)
+story_state = StoryState()
+
+
+def run_nlp_modules(text: str, mode: str = None) -> Dict[str, Any]:
+    """Run the full analysis pipeline for a piece of text.
+
+    `mode` can be used to toggle lighter/fast analyses in future; currently
+    it maps to a minimal features set when 'fast' is provided.
+    """
+    assistant = WritingAssistant()
+    if mode == 'fast':
+        features = {
+            "text_analysis": True,
+            "readability": False,
+            "flow": False,
+            "style": False,
+            "consistency": False,
+            "transform": False,
+            "explanations": False,
+            "mind_map": False,
+            "antipatterns": False,
+        }
+    else:
+        features = None
+    return assistant.analyze(text, features=features)
+
+
+def process_story(new_text: str, mode: str = None, generate: bool = True) -> Dict[str, Any]:
+
+
+    story_state.add_text(new_text)
+    story = story_state.get_text()
+
+    analysis = run_nlp_modules(story, mode)
+
+    continuation = ""
+    updated_analysis = analysis
+    updated_story = story
+
+    if generate:
+        continuation = generate_story_continuation(story)
+
+        story_state.add_text(continuation)
+
+        updated_story = story_state.get_text()
+        updated_analysis = run_nlp_modules(updated_story, mode)
+
+    return {
+        "analysis_before": analysis,
+        "generated_text": continuation,
+        "analysis_after": updated_analysis,
+        "full_story": updated_story
+    }
 
 
 # Quick test when run directly

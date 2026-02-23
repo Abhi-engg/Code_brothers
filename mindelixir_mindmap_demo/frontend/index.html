@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>MindElixir Mind Map Demo</title>
   <link rel="stylesheet" href="style.css">
-  <!-- MindElixir (dist) -->
-  <link rel="stylesheet" href="https://unpkg.com/mind-elixir/dist/style.css">
+  <!-- MindElixir (dist) - pinned to a specific release for stability -->
+  <link rel="stylesheet" href="https://unpkg.com/mind-elixir@2.1.1/dist/style.css">
 </head>
 <body>
   <div class="app">
@@ -43,8 +43,57 @@
 
     <footer class="footer">FastAPI + KeyBERT + spaCy → MindElixir demo</footer>
 
-    <script src="https://unpkg.com/mind-elixir/dist/index.js"></script>
-    <script src="script.js"></script>
+    <!-- Load pinned MindElixir build; keep script.js separate so it runs after the lib loads -->
+    <script src="https://unpkg.com/mind-elixir@2.1.1/dist/index.js"></script>
+    <script>
+      // Try loading an ES module build first (if available), then fall back to the UMD build.
+      (async function loadMindElixirAndApp(){
+        const version = '2.1.1';
+        const esmUrls = [
+          `https://unpkg.com/mind-elixir@${version}/dist/index.esm.js`,
+          `https://unpkg.com/mind-elixir@${version}/esm/index.js`,
+          `https://unpkg.com/mind-elixir@${version}/dist/index.js`
+        ];
+
+        // Helper to append the main app script after the lib is attached to window
+        function appendApp(){
+          const s = document.createElement('script');
+          s.src = 'script.js';
+          document.body.appendChild(s);
+        }
+
+        // Try dynamic import of ESM builds
+        for(const u of esmUrls){
+          try{
+            if (u.endsWith('.js')){
+              const mod = await import(u);
+              // Prefer named export MindElixir, else default
+              const ctor = mod.MindElixir || mod.default || mod.ME || mod;
+              if(ctor){
+                window.MindElixir = ctor;
+                appendApp();
+                return;
+              }
+            }
+          }catch(e){
+            // ignore and try next
+          }
+        }
+
+        // Fallback: load pinned UMD build then append app after it loads
+        const umd = document.createElement('script');
+        umd.src = `https://unpkg.com/mind-elixir@${version}/dist/index.js`;
+        umd.onload = function(){
+          // The UMD should set window.MindElixir or similar; give script a moment
+          setTimeout(appendApp, 50);
+        };
+        umd.onerror = function(){
+          // If loading fails, still append app so it can show a helpful error message
+          appendApp();
+        };
+        document.body.appendChild(umd);
+      })();
+    </script>
   </div>
 </body>
 </html>

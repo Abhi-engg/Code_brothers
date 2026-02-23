@@ -32,10 +32,11 @@ from . import explanation
 from . import grammar_checker
 from . import concept_extractor
 from . import antipatterns
-
+from .pipeline import process_story
 __all__ = [
     "WritingAssistant",
     "analyze_text",
+    "process_story",   
     "NarrativeConsistencyAnalyzer",
     "text_analyzer",
     "enhancer",
@@ -49,3 +50,5 @@ __all__ = [
 
 __version__ = "1.0.0"
 __author__ = "Code Brothers"
+
+
